@@ -72,13 +72,11 @@ impl<'a, T> In<'a, T> {
     where
         F: FnOnce(In<T>) -> Out<T>,
     {
-        unsafe {
-            let ptr = std::alloc::alloc(std::alloc::Layout::new::<T>()) as *mut T;
+        let mut ptr = Box::new_uninit();
 
-            In::raw(ptr, f);
+        f(In(&mut ptr));
 
-            Box::from_raw(ptr)
-        }
+        unsafe { ptr.assume_init() }
     }
 
     /// Cast this pointer from `In<T>` to `In<U>`.
@@ -181,10 +179,10 @@ impl<'a, T> In<'a, T> {
 #[macro_export]
 macro_rules! init {
     ($p:ident.$field:ident @ $then:expr) => {
-        $crate::internal::In::raw(std::ptr::addr_of_mut!((*$p).$field), move |$p| $then)
+        $crate::internal::In::raw(&raw mut (*$p).$field, move |$p| $then)
     };
     ($p:ident.$field:ident = $val:expr) => {
-        $crate::internal::In::raw(std::ptr::addr_of_mut!((*$p).$field), |$p| $p.put($val))
+        $crate::internal::In::raw(&raw mut (*$p).$field, |$p| $p.put($val))
     };
 }
 
@@ -215,15 +213,6 @@ where
 #[wasm_bindgen]
 extern "C" {
     pub(crate) type UnsafeNode;
-
-    #[wasm_bindgen(js_namespace = ["document", "body"], js_name = appendChild)]
-    pub(crate) fn append_body(node: &JsValue);
-    #[wasm_bindgen(js_namespace = document, js_name = createTextNode)]
-    pub(crate) fn text_node(t: &str) -> Node;
-    #[wasm_bindgen(js_namespace = document, js_name = createTextNode)]
-    pub(crate) fn text_node_num(t: f64) -> Node;
-    #[wasm_bindgen(js_namespace = document, js_name = createTextNode)]
-    pub(crate) fn text_node_bool(t: bool) -> Node;
 
     // dom manipulation ----------------
 
@@ -285,6 +274,15 @@ mod hidden {
 
 #[wasm_bindgen(module = "/js/util.js")]
 extern "C" {
+    #[wasm_bindgen(js_name = appendBody)]
+    pub(crate) fn append_body(node: &JsValue);
+    #[wasm_bindgen(js_name = createTextNode)]
+    pub(crate) fn text_node(t: &str) -> Node;
+    #[wasm_bindgen(js_name = createTextNode)]
+    pub(crate) fn text_node_num(t: f64) -> Node;
+    #[wasm_bindgen(js_name = createTextNode)]
+    pub(crate) fn text_node_bool(t: bool) -> Node;
+
     #[wasm_bindgen(js_name = "emptyNode")]
     pub(crate) fn empty_node() -> Node;
     #[wasm_bindgen(js_name = "fragment")]
@@ -316,9 +314,6 @@ extern "C" {
 
     #[wasm_bindgen(js_name = "makeEventHandler")]
     pub(crate) fn make_event_handler(closure: *mut (), vcall: usize) -> JsValue;
-
-    #[wasm_bindgen(js_name = "checkEventHandler")]
-    pub(crate) fn check_event_handler();
 }
 
 #[cfg(test)]

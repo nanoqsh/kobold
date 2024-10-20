@@ -1,5 +1,12 @@
 const fragmentDecorators = new WeakMap();
 
+export function appendBody(n) {
+	document.body.appendChild(n);
+}
+export function createTextNode(t) {
+	return document.createTextNode(t);
+}
+
 export function emptyNode() { return document.createTextNode(""); }
 export function fragment()
 {
@@ -35,8 +42,3 @@ export function replaceClass(n,o,v) { n.classList.replace(o,v); }
 export function toggleClass(n,c,v) { n.classList.toggle(c,v); }
 
 export function makeEventHandler(c,f) { return (e) => wasmBindings.koboldCallback(e,c,f); }
-export function checkEventHandler() { if (typeof wasmBindings !== "object") console.error(
-`Missing \`wasmBindings\` in global scope.
-As of Kobold v0.10 and Trunk v0.17.16 you no longer need to export bindings manually, \
-please remove the custom \`pattern_script\' from your \`Trunk.toml\` file.
-`) }

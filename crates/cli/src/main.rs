@@ -43,10 +43,33 @@ impl<'source> Wasm<'source> {
 
         let parser = Parser::new(0);
 
+        let mut out = Wasm {
+            size: 0,
+            head: &[],
+            imports: Vec::new(),
+            tail: &[],
+        };
+
         for payload in parser.parse_all(source) {
-            let Payload::ImportSection(section) = payload? else {
-                continue;
+            let section = match payload? {
+                Payload::ImportSection(s) => s,
+                Payload::ExportSection(s) => {
+                    println!("Found an export section {:?} {:?}", s.range(), &source[s.range()]);
+
+                    let mut iter = s.into_iter_with_offsets();
+
+                    while let Some(Ok((index, export))) = iter.next() {
+                        println!("export at {index}: {}", export.name);
+                    }
+                    continue;
+                }
+                _ => continue,
             };
+            println!("Found an import section");
+
+            // let Payload::ImportSection(section) = payload? else {
+            //     continue;
+            // };
             let mut head = &source[..section.range().start - 1];
             let size = section.range().end - section.range().start;
             let wasm = &source[section.range()];
@@ -64,11 +87,11 @@ impl<'source> Wasm<'source> {
             let mut i = 0;
             let mut imports = Vec::with_capacity(section.count() as usize);
 
-            while !wasm[i..].starts_with(b"\x03wbg") {
+            while i < wasm.len() && !wasm[i..].starts_with(b"\x03wbg") {
                 i += 1;
             }
 
-            while wasm[i..].starts_with(b"\x03wbg") {
+            while i < wasm.len() && wasm[i..].starts_with(b"\x03wbg") {
                 let len = wasm[i + 4] as usize;
 
                 i += 5;
@@ -94,15 +117,13 @@ impl<'source> Wasm<'source> {
                 panic!("Some imports not found?");
             }
 
-            return Ok(Wasm {
-                size,
-                head,
-                imports,
-                tail,
-            });
+            out.size = size;
+            out.head = head;
+            out.imports = imports;
+            out.tail = tail;
         }
 
-        panic!("No import section in Wasm");
+        Ok(out)
     }
 }
 
