@@ -6,7 +6,7 @@ use std::fmt::{self, Debug};
 
 use tokens::{Group, Ident, Span, TokenStream, TokenTree};
 
-use crate::dom::{IteratorExt, Lit, Node, ParseError};
+use crate::dom::{IteratorExt, Node, ParseError, TokenTreeExt};
 use crate::parse::IdentExt;
 use crate::tokenize::prelude::*;
 
@@ -84,12 +84,24 @@ impl TryFrom<Group> for Expression {
                 stream.next();
 
                 if keyword == "for" {
-                    if let Some(_) = stream.allow_consume('<') {
-                        let n = stream.expect(Lit)?;
-                        let close = stream.expect('>')?;
+                    if let Some(open) = stream.allow_consume('<') {
+                        let mut bound = TokenStream::new();
+                        let mut close = None;
+
+                        while let Some(tt) = stream.next() {
+                            if tt.is('>') {
+                                close = Some(tt);
+                                break;
+                            }
+
+                            bound.extend([tt]);
+                        }
+
+                        let close =
+                            close.ok_or(ParseError::new("expected > after opening <", open))?;
 
                         keyword = "for_bounded";
-                        invoke = Some(("::<_, ", n, close).tokenize())
+                        invoke = Some(("::<_, ", block(bound), close).tokenize())
                     }
                 }
                 let keyword = Ident::new_raw(keyword, span);
