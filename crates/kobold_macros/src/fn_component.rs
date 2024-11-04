@@ -348,6 +348,8 @@ impl Tokenize for FnComponent {
 
         let field_generics = ('<', each(self.arguments.iter().map(Argument::name)), '>').tokenize();
 
+        let state_present = self.arguments.iter().any(|a| a.name.eq_str("state"));
+
         mo.write((
             "#[allow(non_camel_case_types)] impl",
             field_generics.clone(),
@@ -357,7 +359,10 @@ impl Tokenize for FnComponent {
                 self.arguments
                     .iter()
                     .enumerate()
-                    .map(|(i, a)| a.setter(finder.as_mut(), i, &self.arguments)),
+                    .map(|(i, a)| a.setter(finder.as_mut(), i, &self.arguments).tokenize())
+                    .chain((!state_present).then(||
+                        "#[inline(always)] pub fn state<T>(self, _: T) -> Self { self }".tokenize()
+                    ))
             )),
         ));
 
