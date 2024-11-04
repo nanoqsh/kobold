@@ -156,11 +156,7 @@ where
     }
 
     fn update(self, p: &mut Self::Product) {
-        p.inner.state.with(|state| {
-            if self.state.update(state).should_render() {
-                p.inner.update();
-            }
-        })
+        p.inner.update();
     }
 }
 
@@ -246,5 +242,23 @@ where
 
     fn update(self, p: &mut Self::Product) {
         self.with_state.update(&mut p.product);
+    }
+}
+
+impl<P> Hook<P> {
+    pub fn nest<'a, S, F, V>(&'a self, state: S, render: F) -> impl View + use<'a, S, F, V, P>
+    where
+        S: IntoState + 'a,
+        F: Fn(&'a Hook<S::State>, &'a Hook<P>) -> V + 'static,
+        V: View + 'a,
+        P: 'static,
+    {
+        let parent: *const Self = self;
+
+        stateful(state, move |state| {
+            let parent = unsafe { &*parent };
+
+            render(state, parent)
+        })
     }
 }
