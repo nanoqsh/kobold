@@ -21,7 +21,7 @@ where
 }
 
 thread_local! {
-    static RUNTIME: UnsafeCell<Option<Box<dyn Runtime>>> = const { UnsafeCell::new(None) };
+    static RUNTIME: UnsafeCell<Option<*mut dyn Runtime>> = const { UnsafeCell::new(None) };
 }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
@@ -46,16 +46,17 @@ where
 
         internal::append_body(runtime.product.js());
 
-        RUNTIME.with(move |rt| unsafe { *rt.get() = Some(runtime) });
+        RUNTIME.with(move |rt| unsafe { *rt.get() = Some(Box::into_raw(runtime)) });
     }
 }
 
 pub(crate) fn update() {
     RUNTIME.with(|rt| {
-        if let Some(mut runtime) = unsafe { (*rt.get()).take() } {
-            runtime.update();
+        let rt = unsafe { &mut *rt.get() };
+        if let Some(runtime) = rt.take() {
+            unsafe { (*runtime).update() };
 
-            unsafe { *rt.get() = Some(runtime) };
+            *rt = Some(runtime);
         }
     })
 }
