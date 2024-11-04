@@ -1,4 +1,5 @@
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
+use std::rc::{Rc, Weak};
 
 use crate::{init, internal, In, Mountable, Out, View};
 
@@ -30,7 +31,7 @@ where
     F: Fn() -> V + 'static,
     V: View,
 {
-    if RUNTIME.with(|rt| unsafe { (*rt.get()).is_none() }) {
+    if let Ok(true) = RUNTIME.try_with(|rt| unsafe { (*rt.get()).is_none() }) {
         init_panic_hook();
 
         let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
@@ -50,7 +51,7 @@ where
     }
 }
 
-pub(crate) fn update() {
+fn update() {
     RUNTIME.with(|rt| {
         let rt = unsafe { &mut *rt.get() };
         if let Some(runtime) = rt.take() {
@@ -58,7 +59,7 @@ pub(crate) fn update() {
 
             *rt = Some(runtime);
         }
-    })
+    });
 }
 
 fn init_panic_hook() {
@@ -69,15 +70,18 @@ fn init_panic_hook() {
 
 // --------------- NEW STATEFUL MOD? ------------
 
-use std::ops::Deref;
 use std::marker::PhantomData;
+use std::ops::Deref;
 
-use crate::stateful::{IntoState, ShouldRender};
 use crate::event::{EventCast, Listener};
+use crate::stateful::{IntoState, ShouldRender};
 
 use wasm_bindgen::JsValue;
 
-pub fn stateful<'a, S, F, V>(state: S, render: F) -> Stateful<S, impl Fn(*const Hook<S::State>) -> V>
+pub fn stateful<'a, S, F, V>(
+    state: S,
+    render: F,
+) -> Stateful<S, impl Fn(*const Hook<S::State>) -> V>
 where
     S: IntoState,
     F: Fn(&'a Hook<S::State>) -> V,
@@ -112,7 +116,7 @@ where
 
     fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
         p.in_place(|p| unsafe {
-            let state = init!(p.state = Hook(UnsafeCell::new(self.state.init())));
+            let state = init!(p.state = Hook::new(UnsafeCell::new(self.state.init())));
 
             init!(p.product @ (self.render)(&*state).build(p));
 
@@ -145,18 +149,143 @@ where
     }
 }
 
-#[repr(transparent)]
-pub struct Hook<S>(UnsafeCell<S>);
+impl<S, R> Stateful<S, R>
+where
+    S: IntoState,
+{
+    pub fn once<F, P>(self, handler: F) -> Once<S, R, F>
+    where
+        F: FnOnce(Signal<S::State>) -> P,
+    {
+        Once {
+            with_state: self,
+            handler,
+        }
+    }
+}
+
+pub struct Once<S, R, F> {
+    with_state: Stateful<S, R>,
+    handler: F,
+}
+
+pub struct OnceProduct<S, P, D> {
+    inner: StatefulProduct<S, P>,
+    _no_drop: D,
+}
+
+impl<S, P, D> Mountable for OnceProduct<S, P, D>
+where
+    StatefulProduct<S, P>: Mountable,
+    D: 'static,
+{
+    type Js = <StatefulProduct<S, P> as Mountable>::Js;
+
+    fn js(&self) -> &JsValue {
+        self.inner.js()
+    }
+
+    fn unmount(&self) {
+        self.inner.unmount()
+    }
+
+    fn replace_with(&self, new: &JsValue) {
+        self.inner.replace_with(new);
+    }
+}
+
+impl<S, R, F, V, D> View for Once<S, R, F>
+where
+    S: IntoState,
+    R: Fn(*const Hook<S::State>) -> V,
+    F: FnOnce(Signal<S::State>) -> D,
+    V: View,
+    D: 'static,
+{
+    type Product = OnceProduct<S::State, V::Product, D>;
+
+    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
+        p.in_place(|p| unsafe {
+            let product = init!(p.inner @ self.with_state.build(p));
+
+            let _no_drop = (self.handler)(Signal::new(&product.state));
+
+            init!(p._no_drop = _no_drop);
+
+            Out::from_raw(p)
+        })
+    }
+
+    fn update(self, p: &mut Self::Product) {
+        self.with_state.update(&mut p.inner)
+    }
+}
+
+// --------------------- Hook stuff ----------
+
+pub struct Signal<S> {
+    inner: *const UnsafeCell<S>,
+    drop_flag: Weak<()>,
+}
+
+impl<S> Signal<S> {
+    fn new(hook: &Hook<S>) -> Self {
+        let inner = &hook.inner;
+        let rc = unsafe { &mut *hook.drop_flag.get() }.get_or_insert_with(|| Rc::new(()));
+        let drop_flag = Rc::downgrade(rc);
+
+        Signal { inner, drop_flag }
+    }
+
+    pub fn update<F, O>(&self, mutator: F)
+    where
+        F: FnOnce(&mut S) -> O,
+        O: ShouldRender,
+    {
+        if self.drop_flag.strong_count() == 1 {
+            // TODO: Use WithCell here!
+            // if inner.state.with(mutator).should_render() {
+            if mutator(unsafe { &mut *(*self.inner).get() }).should_render() {
+                update();
+            }
+        }
+    }
+}
+
+pub struct Hook<S> {
+    inner: UnsafeCell<S>,
+    drop_flag: UnsafeCell<Option<Rc<()>>>,
+}
 
 impl<S> Deref for Hook<S> {
     type Target = S;
 
     fn deref(&self) -> &S {
-        unsafe { &*self.0.get() }
+        unsafe { &*self.inner.get() }
     }
 }
 
+// impl<S> Drop for Hook<S> {
+//     fn drop(&mut self) {
+//         i
+//         if self.drop_flag.get() != !0 {
+//             STATE_STACK.with(|stack| {
+//                 let stack = unsafe { &mut *stack.get() };
+
+//                 stack.pop();
+//             })
+//         }
+//     }
+// }
+
 impl<S> Hook<S> {
+    const fn new(inner: UnsafeCell<S>) -> Self {
+        Hook {
+            inner,
+            drop_flag: UnsafeCell::new(None),
+        }
+    }
+
     /// Binds a closure to a mutable reference of the state. While this method is public
     /// it's recommended to use the [`bind!`](crate::bind) macro instead.
     pub fn bind<E, F, O>(&self, callback: F) -> Bound<S, F>
@@ -166,7 +295,7 @@ impl<S> Hook<S> {
         F: Fn(&mut S, E) -> O + 'static,
         O: ShouldRender,
     {
-        let inner = &self.0;
+        let inner = &self.inner;
 
         Bound { inner, callback }
     }
@@ -297,7 +426,7 @@ where
         // No need to update zero-sized closures.
         //
         // This is a const branch that should be optimized away.
-        if std::mem::size_of::<U>() != 0 {
+        if size_of::<U>() != 0 {
             self.bound.update(p);
         }
     }
