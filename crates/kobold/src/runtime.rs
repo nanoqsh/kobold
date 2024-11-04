@@ -71,7 +71,7 @@ fn init_panic_hook() {
 use std::ops::Deref;
 use std::marker::PhantomData;
 
-use crate::stateful::{IntoState, WithCell, ShouldRender};
+use crate::stateful::{IntoState, ShouldRender};
 use crate::event::{EventCast, Listener};
 
 use wasm_bindgen::JsValue;
@@ -111,7 +111,7 @@ where
 
     fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
         p.in_place(|p| unsafe {
-            let state = init!(p.state = Hook(WithCell::new(self.state.init())));
+            let state = init!(p.state = Hook(UnsafeCell::new(self.state.init())));
 
             init!(p.product @ (self.render)(&*state).build(p));
 
@@ -145,13 +145,13 @@ where
 }
 
 #[repr(transparent)]
-pub struct Hook<S>(WithCell<S>);
+pub struct Hook<S>(UnsafeCell<S>);
 
 impl<S> Deref for Hook<S> {
     type Target = S;
 
     fn deref(&self) -> &S {
-        unsafe { self.0.ref_unchecked() }
+        unsafe { &*self.0.get() }
     }
 }
 
@@ -209,8 +209,23 @@ impl<S> Hook<S> {
     }
 }
 
+impl<'a, V> View for &'a Hook<V>
+where
+    &'a V: View + 'a,
+{
+    type Product = <&'a V as View>::Product;
+
+    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
+        (**self).build(p)
+    }
+
+    fn update(self, p: &mut Self::Product) {
+        (**self).update(p)
+    }
+}
+
 pub struct Bound<'b, S, F> {
-    inner: &'b WithCell<S>,
+    inner: &'b UnsafeCell<S>,
     callback: F,
 }
 
@@ -224,7 +239,7 @@ impl<S, F> Bound<'_, S, F> {
     {
         let Bound { inner, callback } = self;
 
-        let inner = inner as *const WithCell<S>;
+        let inner = inner as *const UnsafeCell<S>;
         let bound = move |e| {
             // ⚠️ Safety:
             // ==========
@@ -232,7 +247,7 @@ impl<S, F> Bound<'_, S, F> {
             // This is fired only as event listener from the DOM, which guarantees that
             // state is not currently borrowed, as events cannot interrupt normal
             // control flow, and `Signal`s cannot borrow state across .await points.
-            let state = unsafe { (*inner).mut_unchecked() };
+            let state = unsafe { &mut *(*inner).get() };
 
             if callback(state, e).should_render() {
                 update();

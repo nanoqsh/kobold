@@ -2,7 +2,7 @@ use kobold::prelude::*;
 
 #[component]
 fn list_example(count: u32) -> impl View {
-    stateful(count, |count| {
+    kobold::runtime::stateful(count, |count| {
         view! {
             <div>
                 <h1 class="Greeter">"List example"</h1>
@@ -30,7 +30,7 @@ fn list_item(n: u32) -> impl View {
 }
 
 fn main() {
-    kobold::start(view! {
+    kobold::runtime::start(|| view! {
         <!list_example count={2}>
     });
 }

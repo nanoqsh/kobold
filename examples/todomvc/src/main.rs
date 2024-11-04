@@ -5,6 +5,8 @@ mod state;
 
 use state::*;
 
+use kobold::runtime::Hook;
+
 fn app(state: &Hook<State>) -> impl View + '_ {
     let hidden = class!("hidden" if state.entries.is_empty());
 
@@ -132,5 +134,5 @@ fn filter(by: Filter, state: &Hook<State>) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::start(stateful(State::default, app));
+    kobold::runtime::start(|| kobold::runtime::stateful(State::default, app));
 }

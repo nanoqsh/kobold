@@ -28,8 +28,7 @@ mod into_state;
 mod product;
 mod should_render;
 
-// TODO: remove pub(crate) once we solve the new stateful nonsense
-pub(crate) use cell::WithCell;
+use cell::WithCell;
 use product::{Product, ProductHandler};
 
 pub use hook::{Bound, Hook, Signal};
