@@ -28,7 +28,8 @@ mod into_state;
 mod product;
 mod should_render;
 
-use cell::WithCell;
+// TODO: remove pub(crate) once we solve the new stateful nonsense
+pub(crate) use cell::WithCell;
 use product::{Product, ProductHandler};
 
 pub use hook::{Bound, Hook, Signal};
@@ -248,11 +249,14 @@ where
 impl<P> Hook<P> {
     pub fn nest<'a, S, F, V>(&'a self, state: S, render: F) -> impl View + use<'a, S, F, V, P>
     where
-        S: IntoState + 'a,
+        S: IntoState,
         F: Fn(&'a Hook<S::State>, &'a Hook<P>) -> V + 'static,
         V: View + 'a,
         P: 'static,
     {
+        // This is similar issue to the one in `stateful` function, so like there
+        // we erase the lifetime from the parent state `Hook` and recreate the ref
+        // inside the closure.
         let parent: *const Self = self;
 
         stateful(state, move |state| {
