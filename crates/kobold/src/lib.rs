@@ -422,7 +422,6 @@ pub mod runtime;
 
 mod value;
 
-#[cfg(feature = "stateful")]
 pub mod stateful;
 
 use internal::{In, Out};
@@ -435,14 +434,9 @@ use internal::{In, Out};
 /// ```
 pub mod prelude {
     pub use crate::event::{Event, KeyboardEvent, MouseEvent};
+    pub use crate::stateful::{stateful, Hook, IntoState, Signal, Then};
     pub use crate::{bind, class, event, state};
     pub use crate::{component, view, View};
-
-    // #[cfg(feature = "stateful")]
-    // pub use crate::stateful::{stateful, Hook, IntoState, Signal, Then};
-
-    pub use crate::stateful::{IntoState, Then};
-    pub use crate::runtime::{stateful, Hook};
 }
 
 pub use runtime::start;

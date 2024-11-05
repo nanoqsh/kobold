@@ -156,7 +156,7 @@ fn let_state_syntax(stream: TokenStream) -> TokenStream {
             head.clear();
 
             let body = work(head, stream);
-            let body = call("::kobold::runtime::stateful", (expr, ", move |", ident, '|', block(body)));
+            let body = call("::kobold::stateful::stateful", (expr, ", move |", ident, '|', block(body)));
 
             return Some(body.tokenize());
         }

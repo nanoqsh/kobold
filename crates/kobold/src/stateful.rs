@@ -12,43 +12,20 @@
 //! be used to create views that have ownership over some arbitrary mutable state.
 //!
 use std::cell::UnsafeCell;
-use std::mem::MaybeUninit;
-use std::rc::Rc;
 
 use wasm_bindgen::JsValue;
-use web_sys::Node;
 
-use crate::dom::Anchor;
 use crate::internal::{In, Out};
 use crate::{init, Mountable, View};
 
 mod cell;
 mod hook;
 mod into_state;
-mod product;
 mod should_render;
-
-use cell::WithCell;
-use product::{Product, ProductHandler};
 
 pub use hook::{Bound, Hook, Signal};
 pub use into_state::IntoState;
 pub use should_render::{ShouldRender, Then};
-
-#[repr(C)]
-struct Inner<S, P: ?Sized = dyn Product<S>> {
-    state: WithCell<S>,
-    prod: UnsafeCell<P>,
-}
-
-pub struct Stateful<S, F> {
-    state: S,
-    render: F,
-}
-
-pub struct StatefulProduct<S> {
-    inner: Rc<Inner<S>>,
-}
 
 /// Create a stateful [`View`] over some mutable state. The state
 /// needs to be created using the [`IntoState`] trait.
@@ -67,10 +44,10 @@ pub struct StatefulProduct<S> {
 pub fn stateful<'a, S, F, V>(
     state: S,
     render: F,
-) -> Stateful<S, impl Fn(*const Hook<S::State>) -> V + 'static>
+) -> Stateful<S, impl Fn(*const Hook<S::State>) -> V>
 where
     S: IntoState,
-    F: Fn(&'a Hook<S::State>) -> V + 'static,
+    F: Fn(&'a Hook<S::State>) -> V,
     V: View + 'a,
 {
     // There is no safe way to represent a generic closure with generic return type
@@ -82,100 +59,56 @@ where
     Stateful { state, render }
 }
 
-impl<S, P> Inner<S, MaybeUninit<P>> {
-    unsafe fn as_init(&self) -> &Inner<S, P> {
-        &*(self as *const _ as *const Inner<S, P>)
-    }
-
-    unsafe fn into_init(self: Rc<Self>) -> Rc<Inner<S, P>> {
-        std::mem::transmute(self)
-    }
+pub struct Stateful<S, F> {
+    state: S,
+    render: F,
 }
 
-impl<S> Inner<S> {
-    fn update(&self) {
-        // ⚠️ Safety:
-        // ==========
-        //
-        // `prod` is an implementation detail and it's never mut borrowed
-        // unless `state` is borrowed first, which is guarded by `WithCell`
-        // or otherwise guaranteed to be safe.
-        //
-        // Ideally whole `Inner` would be wrapped in `WithCell`, but we
-        // can't do that until `CoerceUnsized` is stabilized.
-        //
-        // <https://github.com/rust-lang/rust/issues/18598>
-        unsafe { (*self.prod.get()).update(Hook::new(self)) }
-    }
+pub struct StatefulProduct<S, P> {
+    state: Hook<S>,
+    product: P,
 }
 
 impl<S, F, V> View for Stateful<S, F>
 where
     S: IntoState,
-    F: Fn(*const Hook<S::State>) -> V + 'static,
+    F: Fn(*const Hook<S::State>) -> V,
     V: View,
 {
-    type Product = StatefulProduct<S::State>;
+    type Product = StatefulProduct<S::State, V::Product>;
 
     fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        let inner = Rc::new(Inner {
-            state: WithCell::new(self.state.init()),
-            prod: UnsafeCell::new(MaybeUninit::uninit()),
-        });
+        p.in_place(|p| unsafe {
+            let state = init!(p.state = Hook::new(UnsafeCell::new(self.state.init())));
 
-        // ⚠️ Safety:
-        // ==========
-        //
-        // Initial render can only access the `state` from the hook, the `prod` is
-        // not touched until an event is fired, which happens after this method
-        // completes and initializes the `prod`.
-        let view = (self.render)(Hook::new(unsafe { inner.as_init() }));
+            init!(p.product @ (self.render)(&*state).build(p));
 
-        // ⚠️ Safety:
-        // ==========
-        //
-        // This looks scary, but it just initializes the `prod`. We need to use the
-        // closure syntax with a raw pointer to get around lifetime restrictions.
-        unsafe {
-            In::raw((*inner.prod.get()).as_mut_ptr(), |prod| {
-                ProductHandler::build(
-                    move |hook, product: *mut V::Product| (self.render)(hook).update(&mut *product),
-                    view,
-                    prod,
-                )
-            });
-        }
-
-        // ⚠️ Safety:
-        // ==========
-        //
-        // At this point `Inner` is fully initialized.
-        p.put(StatefulProduct {
-            inner: unsafe { inner.into_init() },
+            Out::from_raw(p)
         })
     }
 
     fn update(self, p: &mut Self::Product) {
-        p.inner.update();
+        (self.render)(&p.state).update(&mut p.product)
     }
 }
 
-impl<S> Mountable for StatefulProduct<S>
+impl<S, P> Mountable for StatefulProduct<S, P>
 where
     S: 'static,
+    P: Mountable,
 {
-    type Js = Node;
+    type Js = P::Js;
 
     fn js(&self) -> &JsValue {
-        unsafe { (*self.inner.prod.get()).js() }
+        self.product.js()
     }
 
     fn unmount(&self) {
-        unsafe { (*self.inner.prod.get()).unmount() }
+        self.product.unmount()
     }
 
     fn replace_with(&self, new: &JsValue) {
-        unsafe { (*self.inner.prod.get()).replace_with(new) }
+        self.product.replace_with(new);
     }
 }
 
@@ -199,69 +132,54 @@ pub struct Once<S, R, F> {
     handler: F,
 }
 
-pub struct OnceProduct<S, P> {
-    product: StatefulProduct<S>,
-    // hold onto the return value of the `handler`, so it can
-    // be safely dropped along with the `StatefulProduct`
-    _no_drop: P,
+pub struct OnceProduct<S, P, D> {
+    inner: StatefulProduct<S, P>,
+    _no_drop: D,
 }
 
-impl<S, P> Anchor for OnceProduct<S, P>
+impl<S, P, D> Mountable for OnceProduct<S, P, D>
 where
-    StatefulProduct<S>: Mountable,
+    StatefulProduct<S, P>: Mountable,
+    D: 'static,
 {
-    type Js = <StatefulProduct<S> as Mountable>::Js;
-    type Target = StatefulProduct<S>;
+    type Js = <StatefulProduct<S, P> as Mountable>::Js;
 
-    fn anchor(&self) -> &Self::Target {
-        &self.product
+    fn js(&self) -> &JsValue {
+        self.inner.js()
+    }
+
+    fn unmount(&self) {
+        self.inner.unmount()
+    }
+
+    fn replace_with(&self, new: &JsValue) {
+        self.inner.replace_with(new);
     }
 }
 
-impl<S, R, F, P> View for Once<S, R, F>
+impl<S, R, F, V, D> View for Once<S, R, F>
 where
     S: IntoState,
-    F: FnOnce(Signal<S::State>) -> P,
-    P: 'static,
-    Stateful<S, R>: View<Product = StatefulProduct<S::State>>,
+    R: Fn(*const Hook<S::State>) -> V,
+    F: FnOnce(Signal<S::State>) -> D,
+    V: View,
+    D: 'static,
 {
-    type Product = OnceProduct<S::State, P>;
+    type Product = OnceProduct<S::State, V::Product, D>;
 
     fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
         p.in_place(|p| unsafe {
-            let product = init!(p.product @ self.with_state.build(p));
-            let signal = Signal {
-                weak: Rc::downgrade(&product.inner),
-            };
+            let product = init!(p.inner @ self.with_state.build(p));
 
-            init!(p._no_drop = (self.handler)(signal));
+            let _no_drop = (self.handler)(Signal::new(&product.state));
+
+            init!(p._no_drop = _no_drop);
 
             Out::from_raw(p)
         })
     }
 
     fn update(self, p: &mut Self::Product) {
-        self.with_state.update(&mut p.product);
-    }
-}
-
-impl<P> Hook<P> {
-    pub fn nest<'a, S, F, V>(&'a self, state: S, render: F) -> impl View + use<'a, S, F, V, P>
-    where
-        S: IntoState,
-        F: Fn(&'a Hook<S::State>, &'a Hook<P>) -> V + 'static,
-        V: View + 'a,
-        P: 'static,
-    {
-        // This is similar issue to the one in `stateful` function, so like there
-        // we erase the lifetime from the parent state `Hook` and recreate the ref
-        // inside the closure.
-        let parent: *const Self = self;
-
-        stateful(state, move |state| {
-            let parent = unsafe { &*parent };
-
-            render(state, parent)
-        })
+        self.with_state.update(&mut p.inner)
     }
 }

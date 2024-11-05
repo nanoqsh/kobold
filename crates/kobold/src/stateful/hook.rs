@@ -2,35 +2,32 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::future::Future;
+use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
 
-use wasm_bindgen_futures::spawn_local;
+// use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener};
 use crate::internal::{In, Out};
-use crate::stateful::{Inner, ShouldRender};
+use crate::stateful::ShouldRender;
 use crate::View;
 
-/// A hook into some state `S`. A reference to `Hook` is obtained by using the [`stateful`](crate::stateful::stateful)
-/// function.
-///
-/// Hook can be read from though its `Deref` implementation, and it allows for mutations either by [`bind`ing](Hook::bind)
-/// closures to it.
-#[repr(transparent)]
-pub struct Hook<S> {
-    inner: Inner<S>,
-}
-
-#[repr(transparent)]
 pub struct Signal<S> {
-    pub(super) weak: Weak<Inner<S>>,
+    inner: *const UnsafeCell<S>,
+    drop_flag: Weak<()>,
 }
 
 impl<S> Signal<S> {
+    pub(crate) fn new(hook: &Hook<S>) -> Self {
+        let inner = &hook.inner;
+        let rc = unsafe { &mut *hook.drop_flag.get() }.get_or_insert_with(|| Rc::new(()));
+        let drop_flag = Rc::downgrade(rc);
+
+        Signal { inner, drop_flag }
+    }
+
     /// Update the state behind this `Signal`.
     ///
     /// ```
@@ -55,9 +52,11 @@ impl<S> Signal<S> {
         F: FnOnce(&mut S) -> O,
         O: ShouldRender,
     {
-        if let Some(inner) = self.weak.upgrade() {
-            if inner.state.with(mutator).should_render() {
-                inner.update()
+        if self.drop_flag.strong_count() == 1 {
+            // TODO: Use WithCell here!
+            // if inner.state.with(mutator).should_render() {
+            if mutator(unsafe { &mut *(*self.inner).get() }).should_render() {
+                crate::runtime::update();
             }
         }
     }
@@ -67,8 +66,8 @@ impl<S> Signal<S> {
     where
         F: FnOnce(&mut S),
     {
-        if let Some(inner) = self.weak.upgrade() {
-            inner.state.with(mutator);
+        if self.drop_flag.strong_count() == 1 {
+            mutator(unsafe { &mut *(*self.inner).get() });
         }
     }
 
@@ -78,17 +77,25 @@ impl<S> Signal<S> {
     }
 }
 
-impl<S> Clone for Signal<S> {
-    fn clone(&self) -> Self {
-        Signal {
-            weak: self.weak.clone(),
-        }
+pub struct Hook<S> {
+    inner: UnsafeCell<S>,
+    drop_flag: UnsafeCell<Option<Rc<()>>>,
+}
+
+impl<S> Deref for Hook<S> {
+    type Target = S;
+
+    fn deref(&self) -> &S {
+        unsafe { &*self.inner.get() }
     }
 }
 
 impl<S> Hook<S> {
-    pub(super) fn new(inner: &Inner<S>) -> &Self {
-        unsafe { &*(inner as *const _ as *const Hook<S>) }
+    pub(crate) const fn new(inner: UnsafeCell<S>) -> Self {
+        Hook {
+            inner,
+            drop_flag: UnsafeCell::new(None),
+        }
     }
 
     /// Binds a closure to a mutable reference of the state. While this method is public
@@ -105,34 +112,34 @@ impl<S> Hook<S> {
         Bound { inner, callback }
     }
 
-    pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
-    where
-        S: 'static,
-        E: EventCast,
-        F: Fn(Signal<S>, E) -> T + 'static,
-        T: Future<Output = ()> + 'static,
-    {
-        let inner = &self.inner as *const Inner<S>;
+    // pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
+    // where
+    //     S: 'static,
+    //     E: EventCast,
+    //     F: Fn(Signal<S>, E) -> T + 'static,
+    //     T: Future<Output = ()> + 'static,
+    // {
+    //     let inner = &self.inner as *const Inner<S>;
 
-        move |e| {
-            // ⚠️ Safety:
-            // ==========
-            //
-            // This is fired only as event listener from the DOM, which guarantees that
-            // state is not currently borrowed, as events cannot interrupt normal
-            // control flow, and `Signal`s cannot borrow state across .await points.
-            //
-            // This temporary `Rc` will not mess with the `strong_count` value, we only
-            // need it to construct a `Weak` reference to `Inner`.
-            let rc = ManuallyDrop::new(unsafe { Rc::from_raw(inner) });
+    //     move |e| {
+    //         // ⚠️ Safety:
+    //         // ==========
+    //         //
+    //         // This is fired only as event listener from the DOM, which guarantees that
+    //         // state is not currently borrowed, as events cannot interrupt normal
+    //         // control flow, and `Signal`s cannot borrow state across .await points.
+    //         //
+    //         // This temporary `Rc` will not mess with the `strong_count` value, we only
+    //         // need it to construct a `Weak` reference to `Inner`.
+    //         let rc = ManuallyDrop::new(unsafe { Rc::from_raw(inner) });
 
-            let signal = Signal {
-                weak: Rc::downgrade(&*rc),
-            };
+    //         let signal = Signal {
+    //             weak: Rc::downgrade(&*rc),
+    //         };
 
-            spawn_local(callback(signal, e));
-        }
-    }
+    //         spawn_local(callback(signal, e));
+    //     }
+    // }
 
     /// Get the value of state if state implements `Copy`. This is equivalent to writing
     /// `**hook` but conveys intent better.
@@ -144,8 +151,23 @@ impl<S> Hook<S> {
     }
 }
 
+impl<'a, V> View for &'a Hook<V>
+where
+    &'a V: View + 'a,
+{
+    type Product = <&'a V as View>::Product;
+
+    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
+        (**self).build(p)
+    }
+
+    fn update(self, p: &mut Self::Product) {
+        (**self).update(p)
+    }
+}
+
 pub struct Bound<'b, S, F> {
-    inner: &'b Inner<S>,
+    inner: &'b UnsafeCell<S>,
     callback: F,
 }
 
@@ -159,7 +181,7 @@ impl<S, F> Bound<'_, S, F> {
     {
         let Bound { inner, callback } = self;
 
-        let inner = inner as *const Inner<S>;
+        let inner = inner as *const UnsafeCell<S>;
         let bound = move |e| {
             // ⚠️ Safety:
             // ==========
@@ -167,11 +189,10 @@ impl<S, F> Bound<'_, S, F> {
             // This is fired only as event listener from the DOM, which guarantees that
             // state is not currently borrowed, as events cannot interrupt normal
             // control flow, and `Signal`s cannot borrow state across .await points.
-            let inner = unsafe { &*inner };
-            let state = unsafe { inner.state.mut_unchecked() };
+            let state = unsafe { &mut *(*inner).get() };
 
             if callback(state, e).should_render() {
-                inner.update();
+                crate::runtime::update();
             }
         };
 
@@ -217,72 +238,8 @@ where
         // No need to update zero-sized closures.
         //
         // This is a const branch that should be optimized away.
-        if std::mem::size_of::<U>() != 0 {
+        if size_of::<U>() != 0 {
             self.bound.update(p);
         }
-    }
-}
-
-impl<S> Deref for Hook<S> {
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        // ⚠️ Safety:
-        // ==========
-        //
-        // Hook only lives inside the inner closure of `stateful`, and no mutable
-        // references to `Inner` are present while it's around.
-        unsafe { self.inner.state.ref_unchecked() }
-    }
-}
-
-impl<'a, V> View for &'a Hook<V>
-where
-    &'a V: View + 'a,
-{
-    type Product = <&'a V as View>::Product;
-
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        (**self).build(p)
-    }
-
-    fn update(self, p: &mut Self::Product) {
-        (**self).update(p)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::cell::UnsafeCell;
-    use wasm_bindgen::JsCast;
-
-    use crate::stateful::cell::WithCell;
-    use crate::stateful::product::ProductHandler;
-    use crate::value::TextProduct;
-
-    use super::*;
-
-    #[test]
-    fn bound_callback_is_copy() {
-        let inner = Inner {
-            state: WithCell::new(0_i32),
-            prod: UnsafeCell::new(ProductHandler::mock(
-                |_, _| {},
-                TextProduct {
-                    memo: 0,
-                    node: wasm_bindgen::JsValue::UNDEFINED.unchecked_into(),
-                },
-            )),
-        };
-
-        let mock = Bound {
-            inner: &inner,
-            callback: |state: &mut i32, _: web_sys::Event| {
-                *state += 1;
-            },
-        };
-
-        // Make sure we can copy the mock twice
-        let _ = [mock, mock];
     }
 }
