@@ -4,9 +4,15 @@
 
 use std::fmt::{self, Debug, Display, Write};
 use std::hash::{Hash, Hasher};
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
+use wasm_bindgen::JsValue;
+
 use crate::diff::Diff;
+use crate::dom::Mountable;
+use crate::internal::{In, Out};
+use crate::{init, View};
 
 /// Versioned string.
 ///
@@ -28,6 +34,113 @@ pub struct VString {
     inner: String,
     ver: usize,
 }
+
+pub struct Ver<T> {
+    inner: VerValue<T>,
+    ver: usize,
+}
+
+impl<T> Ver<T> {
+    pub fn new<U>(val: U) -> Self
+    where
+        U: Into<T>,
+    {
+        Ver {
+            inner: VerValue {
+                val: ManuallyDrop::new(val.into()),
+            },
+            ver: 0,
+        }
+    }
+
+    pub fn into_inner(self) -> T {
+        let mut this = ManuallyDrop::new(self);
+
+        unsafe { ManuallyDrop::take(&mut this.inner.val) }
+    }
+}
+
+union VerValue<T> {
+    val: ManuallyDrop<T>,
+    noise: usize,
+}
+
+impl<T> VerValue<T> {
+    fn noise(&self) -> u64 {
+        if align_of::<T>() == align_of::<usize>() && (size_of::<T>() % size_of::<usize>() == 0) {
+            unsafe { self.noise as u64 }
+        } else {
+            0
+        }
+    }
+
+    fn val(&self) -> &T {
+        unsafe { &self.val }
+    }
+
+    fn val_mut(&mut self) -> &mut T {
+        unsafe { &mut self.val }
+    }
+}
+
+impl<T> Drop for Ver<T> {
+    fn drop(&mut self) {
+        unsafe { ManuallyDrop::drop(&mut self.inner.val) }
+    }
+}
+
+impl<T> Diff for &'_ Ver<T> {
+    type Memo = u64;
+
+    fn into_memo(self) -> Self::Memo {
+        (self.ver as u64).wrapping_shl(32) | self.inner.noise()
+    }
+
+    fn diff(self, memo: &mut Self::Memo) -> bool {
+        let m = self.into_memo();
+
+        if *memo != m {
+            *memo = m;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl<T> Deref for Ver<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.val()
+    }
+}
+
+impl<T> DerefMut for Ver<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ver += 1;
+
+        self.inner.val_mut()
+    }
+}
+
+impl<T, U> PartialEq<U> for Ver<T>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &U) -> bool {
+        self.inner.val().eq(other)
+    }
+}
+
+// impl<T> Eq for Ver<T>
+// where
+//     T: Eq,
+// {
+//     fn eq(&self, other: &U) -> bool {
+//         self.inner.val().eq(other)
+//     }
+// }
 
 impl VString {
     /// Creates a new empty `VString`.

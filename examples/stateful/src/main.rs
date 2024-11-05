@@ -1,21 +1,24 @@
-use kobold::diff::VString;
+use kobold::diff::Ver;
 use kobold::prelude::*;
 
 struct State {
-    name: VString,
+    name: Ver<String>,
     age: u32,
 }
 
 impl State {
     fn new() -> Self {
         State {
-            name: "Bob".into(),
+            name: Ver::new("Bob"),
             age: 42,
         }
     }
 }
 
-fn app(state: &Hook<State>) -> impl View + '_ {
+#[component]
+fn app() -> impl View {
+    let state = state!(State::new);
+
     // Repeatedly clicking the Alice button does not have to do anything.
     let alice = event!(|state| {
         if state.name != "Alice" {
@@ -39,5 +42,5 @@ fn app(state: &Hook<State>) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::start(stateful(State::new, app));
+    kobold::runtime::start(app);
 }

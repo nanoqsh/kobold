@@ -15,12 +15,14 @@ fn greeter<'a>(name: &'a str, age: Option<u32>) -> impl View + 'a {
 }
 
 fn main() {
-    kobold::start(view! {
-        // Hello Kobold
-        <!greeter>
-        // Hello Alice
-        <!greeter name="Alice">
-        // Hello Bob, you are 42 years old
-        <!greeter name="Bob" age={42}>
+    kobold::runtime::start(|| {
+        view! {
+            // Hello Kobold
+            <!greeter>
+            // Hello Alice
+            <!greeter name="Alice">
+            // Hello Bob, you are 42 years old
+            <!greeter name="Bob" age={42}>
+        }
     });
 }

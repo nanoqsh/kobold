@@ -34,6 +34,8 @@ pub fn component(mut args: ComponentArgs, stream: TokenStream) -> Result<TokenSt
     let sig: Function = stream.parse()?;
     let mut component = FnComponent::new(&mut args, sig)?;
 
+    component.render = let_state_syntax(component.render);
+
     if args.branching.is_some() {
         let scope: Scope = parse(component.render)?;
 
@@ -117,6 +119,65 @@ pub fn args(stream: TokenStream) -> Result<ComponentArgs, ParseError> {
     }
 
     Ok(args)
+}
+
+/// Rewrites a token stream of:
+///
+/// ```rust,ignore
+/// let <ident> = state!(<expr>); ...`
+/// ```
+///
+/// Into:
+///
+/// ```rust,ignore
+/// stateful(<expr>, |<ident>| { ... })
+/// ```
+fn let_state_syntax(stream: TokenStream) -> TokenStream {
+    let mut head = Vec::new();
+    let mut stream = stream.parse_stream();
+
+    fn consume(head: &mut Vec<TokenTree>, stream: &mut ParseStream) -> Option<TokenStream> {
+        head.push(stream.allow_consume("let")?);
+        head.push(stream.allow_consume(IdentPat)?);
+        head.push(stream.allow_consume('=')?);
+        head.push(stream.allow_consume("state")?);
+        head.push(stream.allow_consume('!')?);
+        head.push(stream.allow_consume('(')?);
+
+        // In case there is no semicolon for some reason
+        if let Some(semi) = stream.allow_consume(';') {
+            head.push(semi);
+        }
+
+        if let (TokenTree::Ident(ident), TokenTree::Group(expr)) = (&head[1], &head[5]) {
+            let ident = ident.clone();
+            let expr = expr.stream();
+
+            head.clear();
+
+            let body = work(head, stream);
+            let body = call("::kobold::runtime::stateful", (expr, ", move |", ident, '|', block(body)));
+
+            return Some(body.tokenize());
+        }
+
+        None
+    }
+
+    fn work(head: &mut Vec<TokenTree>, stream: &mut ParseStream) -> TokenStream {
+        if let Some(transformed) = consume(head, stream) {
+            return transformed;
+        }
+
+        // Wrong pattern, restore original token stream
+        let mut out = TokenStream::from_iter(head.drain(..));
+
+        out.extend(stream);
+
+        out
+    }
+
+    work(&mut head, &mut stream)
 }
 
 struct Function {
@@ -360,9 +421,9 @@ impl Tokenize for FnComponent {
                     .iter()
                     .enumerate()
                     .map(|(i, a)| a.setter(finder.as_mut(), i, &self.arguments).tokenize())
-                    .chain((!state_present).then(||
+                    .chain((!state_present).then(|| {
                         "#[inline(always)] pub fn state<T>(self, _: T) -> Self { self }".tokenize()
-                    ))
+                    })),
             )),
         ));
 

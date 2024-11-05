@@ -435,7 +435,7 @@ use internal::{In, Out};
 /// ```
 pub mod prelude {
     pub use crate::event::{Event, KeyboardEvent, MouseEvent};
-    pub use crate::{bind, class, event};
+    pub use crate::{bind, class, event, state};
     pub use crate::{component, view, View};
 
     #[cfg(feature = "stateful")]
@@ -602,6 +602,17 @@ macro_rules! bind {
         $(
             let $v = $hook.bind(move |$hook, $e $(: $e_ty)*| $body);
         )*
+    };
+}
+
+#[macro_export]
+macro_rules! state {
+    ($($dat:tt)*) => {
+        compile_error!(concat!(
+            "`let _ = state!(",
+            stringify!($($dat)*),
+            ");` statement MUST be at the top of a #[component]"
+        ));
     };
 }
 

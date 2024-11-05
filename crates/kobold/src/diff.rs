@@ -16,7 +16,7 @@ use crate::{init, Mountable, View};
 
 mod vstring;
 
-pub use vstring::VString;
+pub use vstring::{VString, Ver};
 
 /// Create a wrapper around a `view` that will prevent updates to it, unless
 /// the value of `guard` has changed.

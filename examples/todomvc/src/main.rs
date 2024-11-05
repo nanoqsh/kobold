@@ -7,7 +7,9 @@ use state::*;
 
 use kobold::runtime::Hook;
 
-fn app(state: &Hook<State>) -> impl View + '_ {
+#[component]
+fn app() -> impl View {
+    let state = state!(State::default);
     let hidden = class!("hidden" if state.entries.is_empty());
 
     let active_count = state.count_active();
@@ -134,5 +136,5 @@ fn filter(by: Filter, state: &Hook<State>) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::runtime::start(|| kobold::runtime::stateful(State::default, app));
+    kobold::runtime::start(app);
 }

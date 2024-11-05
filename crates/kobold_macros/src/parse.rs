@@ -25,7 +25,7 @@ pub type ParseStream = std::iter::Peekable<tokens::token_stream::IntoIter>;
 
 pub mod prelude {
     pub use super::{parse, IdentExt, IteratorExt, TokenTreeExt};
-    pub use super::{IntoSpan, Lit, Parse, ParseError, ParseStream};
+    pub use super::{IdentPat, IntoSpan, Lit, Parse, ParseError, ParseStream};
 }
 
 #[derive(Debug)]
@@ -132,6 +132,19 @@ impl Parse for () {
             Some(tt) => Err(ParseError::new("Unexpected token", tt)),
             _ => Ok(()),
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct IdentPat;
+
+impl Pattern for IdentPat {
+    fn matches(self, tt: &TokenTree) -> bool {
+        matches!(tt, TokenTree::Ident(_))
+    }
+
+    fn expected(self) -> Cow<'static, str> {
+        "Expected an identifier".into()
     }
 }
 
