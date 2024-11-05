@@ -15,7 +15,7 @@ fn greeter<'a>(name: &'a str, age: Option<u32>) -> impl View + 'a {
 }
 
 fn main() {
-    kobold::runtime::start(|| {
+    kobold::start(|| {
         view! {
             // Hello Kobold
             <!greeter>

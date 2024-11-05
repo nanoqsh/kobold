@@ -13,8 +13,5 @@ fn app() -> impl View {
 }
 
 fn main() {
-    kobold::runtime::start(app);
+    kobold::start(app);
 }
-
-
-

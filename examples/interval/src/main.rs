@@ -3,7 +3,7 @@ use kobold::prelude::*;
 
 #[component]
 fn app() -> impl View {
-    kobold::runtime::stateful(0_u32, |seconds| {
+    stateful(0_u32, |seconds| {
         view! {
             <p>
                 "Elapsed seconds: "{ seconds }" "
@@ -21,5 +21,5 @@ fn app() -> impl View {
 }
 
 fn main() {
-    kobold::runtime::start(app);
+    kobold::start(app);
 }

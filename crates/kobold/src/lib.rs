@@ -438,9 +438,14 @@ pub mod prelude {
     pub use crate::{bind, class, event, state};
     pub use crate::{component, view, View};
 
-    #[cfg(feature = "stateful")]
-    pub use crate::stateful::{stateful, Hook, IntoState, Signal, Then};
+    // #[cfg(feature = "stateful")]
+    // pub use crate::stateful::{stateful, Hook, IntoState, Signal, Then};
+
+    pub use crate::stateful::{IntoState, Then};
+    pub use crate::runtime::{stateful, Hook};
 }
+
+pub use runtime::start;
 
 use dom::Mountable;
 
@@ -537,36 +542,6 @@ where
         self.view.update(p);
 
         (self.handler)(p.js().unchecked_ref());
-    }
-}
-
-/// Start the Kobold app by mounting given [`View`] in the document `body`.
-pub fn start(view: impl View) {
-    init_panic_hook();
-
-    use std::mem::MaybeUninit;
-    use std::pin::pin;
-
-    let product = pin!(MaybeUninit::uninit());
-    let product = In::pinned(product, move |p| view.build(p));
-
-    internal::append_body(product.js());
-}
-
-fn init_panic_hook() {
-    // Only enable console hook on debug builds
-    #[cfg(debug_assertions)]
-    {
-        use std::cell::Cell;
-
-        thread_local! {
-            static INIT: Cell<bool> = const { Cell::new(false) };
-        }
-        if !INIT.with(|init| init.get()) {
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
-            INIT.with(|init| init.set(true));
-        }
     }
 }
 

@@ -5,8 +5,6 @@ mod state;
 
 use state::*;
 
-use kobold::runtime::Hook;
-
 #[component]
 fn app() -> impl View {
     let state = state!(State::default);
@@ -136,5 +134,5 @@ fn filter(by: Filter, state: &Hook<State>) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::runtime::start(app);
+    kobold::start(app);
 }

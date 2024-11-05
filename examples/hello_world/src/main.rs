@@ -9,7 +9,7 @@ fn hello(name: &str) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::runtime::start(|| {
+    kobold::start(|| {
         view! {
             <!hello name="Kobold">
         }
