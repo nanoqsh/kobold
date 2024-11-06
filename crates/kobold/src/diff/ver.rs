@@ -2,15 +2,29 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
 use std::hash::{Hash, Hasher};
-use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
-use crate::diff::Diff;
+use crate::diff::{Diff, Fence};
+use crate::View;
+
+#[inline]
+fn next_ver() -> usize {
+    thread_local! {
+        static VER: Cell<usize> = const { Cell::new(0) };
+    }
+
+    let ver = VER.get();
+
+    VER.set(ver.wrapping_add(1));
+
+    ver
+}
 
 pub struct Ver<T> {
-    inner: VerValue<T>,
+    inner: T,
     ver: usize,
 }
 
@@ -20,54 +34,32 @@ impl<T> Ver<T> {
         U: Into<T>,
     {
         Ver {
-            inner: VerValue {
-                val: ManuallyDrop::new(val.into()),
-            },
-            ver: 0,
+            inner: val.into(),
+            ver: next_ver(),
+        }
+    }
+
+    pub const fn fence<V, F>(&self, render: F) -> Fence<usize, F>
+    where
+        V: View,
+        F: FnOnce() -> V,
+    {
+        Fence {
+            guard: self.ver,
+            inner: render,
         }
     }
 
     pub fn into_inner(self) -> T {
-        let mut this = ManuallyDrop::new(self);
-
-        unsafe { ManuallyDrop::take(&mut this.inner.val) }
-    }
-}
-
-union VerValue<T> {
-    val: ManuallyDrop<T>,
-    noise: usize,
-}
-
-impl<T> VerValue<T> {
-    fn noise(&self) -> u64 {
-        if align_of::<T>() == align_of::<usize>() && (size_of::<T>() % size_of::<usize>() == 0) {
-            unsafe { self.noise as u64 }
-        } else {
-            0
-        }
-    }
-
-    fn val(&self) -> &T {
-        unsafe { &self.val }
-    }
-
-    fn val_mut(&mut self) -> &mut T {
-        unsafe { &mut self.val }
-    }
-}
-
-impl<T> Drop for Ver<T> {
-    fn drop(&mut self) {
-        unsafe { ManuallyDrop::drop(&mut self.inner.val) }
+        self.inner
     }
 }
 
 impl<T> Diff for &'_ Ver<T> {
-    type Memo = u64;
+    type Memo = usize;
 
     fn into_memo(self) -> Self::Memo {
-        (self.ver as u64).wrapping_shl(32) | self.inner.noise()
+        self.ver
     }
 
     fn diff(self, memo: &mut Self::Memo) -> bool {
@@ -86,53 +78,24 @@ impl<T> Deref for Ver<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.val()
+        &self.inner
     }
 }
 
 impl<T> DerefMut for Ver<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.ver += 1;
+        self.ver = next_ver();
 
-        self.inner.val_mut()
+        &mut self.inner
     }
 }
 
-impl<T> PartialEq<T> for Ver<T>
+impl<T, U> PartialEq<U> for Ver<T>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
-    fn eq(&self, other: &T) -> bool {
-        self.inner.val().eq(other)
-    }
-}
-
-impl<T> PartialEq for Ver<T>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Ver<T>) -> bool {
-        self.inner.val().eq(other.inner.val())
-    }
-}
-
-impl<T> Eq for Ver<T> where T: Eq {}
-
-impl<T> PartialOrd<Ver<T>> for Ver<T>
-where
-    T: PartialOrd,
-{
-    fn partial_cmp(&self, other: &Ver<T>) -> Option<std::cmp::Ordering> {
-        self.inner.val().partial_cmp(other.inner.val())
-    }
-}
-
-impl<T> Ord for Ver<T>
-where
-    T: Ord,
-{
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.inner.val().cmp(other.inner.val())
+    fn eq(&self, other: &U) -> bool {
+        self.inner.eq(other)
     }
 }
 
@@ -141,7 +104,7 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Debug::fmt(self.inner.val(), f)
+        Debug::fmt(&self.inner, f)
     }
 }
 
@@ -150,7 +113,7 @@ where
     T: Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt(self.inner.val(), f)
+        Display::fmt(&self.inner, f)
     }
 }
 
@@ -159,8 +122,8 @@ where
     T: Write,
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.ver += 1;
-        self.inner.val_mut().write_str(s)
+        self.ver = next_ver();
+        self.inner.write_str(s)
     }
 }
 
@@ -184,7 +147,7 @@ where
     where
         H: Hasher,
     {
-        self.inner.val().hash(state)
+        self.inner.hash(state)
     }
 }
 
