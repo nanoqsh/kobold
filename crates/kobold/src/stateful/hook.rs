@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use std::cell::UnsafeCell;
+use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
@@ -112,34 +113,35 @@ impl<S> Hook<S> {
         Bound { inner, callback }
     }
 
-    // pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
-    // where
-    //     S: 'static,
-    //     E: EventCast,
-    //     F: Fn(Signal<S>, E) -> T + 'static,
-    //     T: Future<Output = ()> + 'static,
-    // {
-    //     let inner = &self.inner as *const Inner<S>;
+    pub fn bind_async<E, F, T>(&self, _callback: F) -> impl Listener<E>
+    where
+        S: 'static,
+        E: EventCast,
+        F: Fn(Signal<S>, E) -> T + 'static,
+        T: Future<Output = ()> + 'static,
+    {
+        move |_| todo!("Fix signals and use WithCell inside hooks, then restore old logic")
+        // let inner = &self.inner as *const Inner<S>;
 
-    //     move |e| {
-    //         // ⚠️ Safety:
-    //         // ==========
-    //         //
-    //         // This is fired only as event listener from the DOM, which guarantees that
-    //         // state is not currently borrowed, as events cannot interrupt normal
-    //         // control flow, and `Signal`s cannot borrow state across .await points.
-    //         //
-    //         // This temporary `Rc` will not mess with the `strong_count` value, we only
-    //         // need it to construct a `Weak` reference to `Inner`.
-    //         let rc = ManuallyDrop::new(unsafe { Rc::from_raw(inner) });
+        // move |e| {
+        //     // ⚠️ Safety:
+        //     // ==========
+        //     //
+        //     // This is fired only as event listener from the DOM, which guarantees that
+        //     // state is not currently borrowed, as events cannot interrupt normal
+        //     // control flow, and `Signal`s cannot borrow state across .await points.
+        //     //
+        //     // This temporary `Rc` will not mess with the `strong_count` value, we only
+        //     // need it to construct a `Weak` reference to `Inner`.
+        //     let rc = ManuallyDrop::new(unsafe { Rc::from_raw(inner) });
 
-    //         let signal = Signal {
-    //             weak: Rc::downgrade(&*rc),
-    //         };
+        //     let signal = Signal {
+        //         weak: Rc::downgrade(&*rc),
+        //     };
 
-    //         spawn_local(callback(signal, e));
-    //     }
-    // }
+        //     spawn_local(callback(signal, e));
+        // }
+    }
 
     /// Get the value of state if state implements `Copy`. This is equivalent to writing
     /// `**hook` but conveys intent better.

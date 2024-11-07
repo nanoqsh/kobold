@@ -32,5 +32,5 @@ fn list_item(n: u32) -> impl View {
 }
 
 fn main() {
-    kobold::start(app);
+    kobold::runtime::start(app);
 }

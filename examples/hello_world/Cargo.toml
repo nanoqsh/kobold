@@ -3,5 +3,8 @@ name = "kobold_hello_world_example"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
-kobold = { path = "../../crates/kobold" }
+kobold = { path = "../../crates/kobold", features=["rlsf"] }

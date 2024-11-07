@@ -439,8 +439,6 @@ pub mod prelude {
     pub use crate::{component, view, View};
 }
 
-pub use runtime::start;
-
 use dom::Mountable;
 
 /// Crate re-exports for the [`view!`](view) macro internals
@@ -582,6 +580,19 @@ macro_rules! state {
             stringify!($($dat)*),
             ");` statement MUST be at the top of a #[component]"
         ));
+    };
+}
+
+#[macro_export]
+macro_rules! start {
+    ($root:expr) => {
+        use $crate::reexport::wasm_bindgen;
+        use wasm_bindgen::prelude::wasm_bindgen;
+
+        #[wasm_bindgen(start)]
+        fn main() {
+            $crate::runtime::start($root);
+        }
     };
 }
 

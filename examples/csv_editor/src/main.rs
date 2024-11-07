@@ -8,50 +8,50 @@ use state::{Editing, State, Text};
 
 #[component]
 fn editor() -> impl View {
-    stateful(State::mock, |state| {
-        let onload = state.bind_async(|state, event: Event<InputElement>| async move {
-            let file = match event.current_target().files().and_then(|list| list.get(0)) {
-                Some(file) => file,
-                None => return,
-            };
+    let state = state!(State::mock);
 
-            state.update(|state| state.name = file.name());
+    let onload = state.bind_async(|state, event: Event<InputElement>| async move {
+        let file = match event.current_target().files().and_then(|list| list.get(0)) {
+            Some(file) => file,
+            None => return,
+        };
 
-            if let Ok(table) = csv::read_file(file).await {
-                state.update(move |state| state.table = table);
-            }
-        });
+        state.update(|state| state.name = file.name());
 
-        let onkeydown = event!(move |state, e: KeyboardEvent<_>| {
-            if matches!(e.key().as_str(), "Esc" | "Escape") {
-                state.editing = Editing::None;
+        if let Ok(table) = csv::read_file(file).await {
+            state.update(move |state| state.table = table);
+        }
+    });
 
-                Then::Render
-            } else {
-                Then::Stop
-            }
-        });
+    let onkeydown = event!(move |state, e: KeyboardEvent<_>| {
+        if matches!(e.key().as_str(), "Esc" | "Escape") {
+            state.editing = Editing::None;
 
-        view! {
-            <input type="file" accept="text/csv" onchange={onload}>
-            <h1>{ ref state.name }</h1>
-            <table {onkeydown}>
-                <thead>
+            Then::Render
+        } else {
+            Then::Stop
+        }
+    });
+
+    view! {
+        <input type="file" accept="text/csv" onchange={onload}>
+        <h1>{ ref state.name }</h1>
+        <table {onkeydown}>
+            <thead>
+                <tr>
+                {
+                    for state.columns().map(|col| head(col, state))
+                }
+            <tbody>
+            {
+                for state.rows().map(move |row| view! {
                     <tr>
                     {
-                        for state.columns().map(|col| head(col, state))
+                        for state.columns().map(move |col| cell(col, row, state))
                     }
-                <tbody>
-                {
-                    for state.rows().map(move |row| view! {
-                        <tr>
-                        {
-                            for state.columns().map(move |col| cell(col, row, state))
-                        }
-                    })
-                }
-        }
-    })
+                })
+            }
+    }
 }
 
 #[component(auto_branch)]
@@ -110,7 +110,5 @@ fn cell(col: usize, row: usize, state: &Hook<State>) -> impl View + '_ {
 }
 
 fn main() {
-    kobold::start(view! {
-        <!editor>
-    });
+    kobold::runtime::start(editor);
 }

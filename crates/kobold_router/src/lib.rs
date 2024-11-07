@@ -60,7 +60,7 @@ impl Router {
 
     /// Starts and hosts your web app with a router
     pub fn start(self) {
-        kobold::start(view! {
+        kobold::runtime::start(|| view! {
            <div id="routerView"></div>
         });
 

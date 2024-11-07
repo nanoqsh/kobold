@@ -1,7 +1,8 @@
-# trunk-version = "0.20"
+trunk-version = "0.21"
 
 [build]
-filehash = false
 public_url = "./"
-no_sri = true
 minify = "on_release"
+filehash = false
+no_sri = true
+# inject_scripts = false

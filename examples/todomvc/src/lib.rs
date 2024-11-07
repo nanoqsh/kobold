@@ -133,6 +133,4 @@ fn filter(by: Filter, state: &Hook<State>) -> impl View + '_ {
     }
 }
 
-fn main() {
-    kobold::start(app);
-}
+kobold::start!(app);
