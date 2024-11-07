@@ -26,9 +26,13 @@ pub struct Ver<T> {
     /// * The high 16 bits come from the `unique()`.
     /// * The low 16 bits start zeroed and increment on each mut access.
     ///
+    /// The high bits guarantee that swapping two `Ver<T>`s around in memory
+    /// (in a list view for example) will result in a diff.
+    ///
+    /// The low bits guarantee that we diff if `T` has been mutably accessed.
     /// 16 bits might seem like a low number, but for our purposes the
-    /// odds of someone doing _exactly_ 2**16 mutations in-between renders
-    /// are virtually none.
+    /// odds of someone doing _exactly_ 65536 mutations in-between renders
+    /// are effectively none.
     ver: [u16; 2],
 }
 
