@@ -2,30 +2,34 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::cell::Cell;
 use std::fmt::{self, Debug, Display, Write};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicU16, Ordering};
 
 use crate::diff::{Diff, Fence};
 use crate::View;
 
 #[inline]
-fn next_ver() -> usize {
-    thread_local! {
-        static VER: Cell<usize> = const { Cell::new(0) };
-    }
+fn unique() -> u16 {
+    // On single-threaded Wasm this compiles to effectively just a static `u16`.
+    static UNIQUE2: AtomicU16 = AtomicU16::new(0);
 
-    let ver = VER.get();
-
-    VER.set(ver.wrapping_add(1));
-
-    ver
+    UNIQUE2.fetch_add(1, Ordering::Relaxed)
 }
 
 pub struct Ver<T> {
     inner: T,
-    ver: usize,
+
+    /// The versioning is _probabilistically_ unique:
+    ///
+    /// * The high 16 bits come from the `unique()`.
+    /// * The low 16 bits start zeroed and increment on each mut access.
+    ///
+    /// 16 bits might seem like a low number, but for our purposes the
+    /// odds of someone doing _exactly_ 2**16 mutations in-between renders
+    /// are virtually none.
+    ver: [u16; 2],
 }
 
 impl<T> Ver<T> {
@@ -35,11 +39,11 @@ impl<T> Ver<T> {
     {
         Ver {
             inner: val.into(),
-            ver: next_ver(),
+            ver: [unique(), 0],
         }
     }
 
-    pub const fn fence<V, F>(&self, render: F) -> Fence<usize, F>
+    pub const fn fence<V, F>(&self, render: F) -> Fence<[u16; 2], F>
     where
         V: View,
         F: FnOnce() -> V,
@@ -56,7 +60,7 @@ impl<T> Ver<T> {
 }
 
 impl<T> Diff for &'_ Ver<T> {
-    type Memo = usize;
+    type Memo = [u16; 2];
 
     fn into_memo(self) -> Self::Memo {
         self.ver
@@ -84,7 +88,7 @@ impl<T> Deref for Ver<T> {
 
 impl<T> DerefMut for Ver<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.ver = next_ver();
+        self.ver[1] = self.ver[1].wrapping_add(1);
 
         &mut self.inner
     }
@@ -122,7 +126,8 @@ where
     T: Write,
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.ver = next_ver();
+        self.ver[1] = self.ver[1].wrapping_add(1);
+
         self.inner.write_str(s)
     }
 }

@@ -133,6 +133,12 @@ impl<T, const N: usize> BoundedVec<T, N> {
 impl<T, const N: usize> BoundedVec<T, N> {
     fn new(mem: In<Self>) -> Out<Self> {
         mem.in_place(|ptr| unsafe {
+            // ⚠️ Safety:
+            // ==========
+            //
+            // We don't initialize `data` here. Since `data` is
+            // an array of `MaybeUninit<T>` it is safe for it to be
+            // uninitialized.
             init!(ptr.len = 0);
 
             Out::from_raw(ptr)

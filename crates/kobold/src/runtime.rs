@@ -39,9 +39,7 @@ where
 
         let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
             p.in_place(move |p| unsafe {
-                let view = render();
-
-                init!(p.product @ view.build(p));
+                init!(p.product @ render().build(p));
                 init!(p.update = move |p: *mut _| render().update(&mut *p));
 
                 Out::from_raw(p)

@@ -179,7 +179,7 @@ impl<'a, T> In<'a, T> {
 #[macro_export]
 macro_rules! init {
     ($p:ident.$field:ident @ $then:expr) => {
-        $crate::internal::In::raw(&raw mut (*$p).$field, move |$p| $then)
+        $crate::internal::In::raw(&raw mut (*$p).$field, |$p| $then)
     };
     ($p:ident.$field:ident = $val:expr) => {
         $crate::internal::In::raw(&raw mut (*$p).$field, |$p| $p.put($val))
