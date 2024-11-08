@@ -3,6 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use std::cell::UnsafeCell;
+use std::ptr::NonNull;
 
 use crate::{init, internal, In, Mountable, Out, View};
 
@@ -25,7 +26,7 @@ where
 }
 
 thread_local! {
-    static RUNTIME: UnsafeCell<Option<*mut dyn Runtime>> = const { UnsafeCell::new(None) };
+    static RUNTIME: UnsafeCell<Option<NonNull<dyn Runtime>>> = const { UnsafeCell::new(None) };
 }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
@@ -48,7 +49,11 @@ where
 
         internal::append_body(runtime.product.js());
 
-        RUNTIME.with(move |rt| unsafe { *rt.get() = Some(Box::into_raw(runtime)) });
+        let runtime = NonNull::new(Box::into_raw(runtime) as _);
+
+        RUNTIME.with(move |rt| unsafe {
+            *rt.get() = runtime;
+        });
     }
 }
 
@@ -56,7 +61,7 @@ pub(crate) fn update() {
     RUNTIME.with(|rt| {
         let rt = unsafe { &mut *rt.get() };
         if let Some(runtime) = rt.take() {
-            unsafe { (*runtime).update() };
+            unsafe { (*runtime.as_ptr()).update() };
 
             *rt = Some(runtime);
         }
