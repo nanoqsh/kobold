@@ -2,9 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::cell::UnsafeCell;
+use std::cell::Cell;
 use std::ptr::NonNull;
 
+use crate::stateful::ShouldRender;
 use crate::{init, internal, In, Mountable, Out, View};
 
 struct RuntimeData<P, F> {
@@ -18,15 +19,15 @@ trait Runtime {
 
 impl<P, F> Runtime for RuntimeData<P, F>
 where
-    F: Fn(*mut P),
+    F: Fn(NonNull<P>),
 {
     fn update(&mut self) {
-        (self.update)(&mut self.product)
+        (self.update)(NonNull::from(&mut self.product))
     }
 }
 
 thread_local! {
-    static RUNTIME: UnsafeCell<Option<NonNull<dyn Runtime>>> = const { UnsafeCell::new(None) };
+    static RUNTIME: Cell<Option<NonNull<dyn Runtime>>> = const { Cell::new(None) };
 }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
@@ -35,13 +36,13 @@ where
     F: Fn() -> V + 'static,
     V: View,
 {
-    if let Ok(true) = RUNTIME.try_with(|rt| unsafe { (*rt.get()).is_none() }) {
+    if let Ok(true) = RUNTIME.try_with(|rt| rt.get().is_none()) {
         init_panic_hook();
 
         let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
             p.in_place(move |p| unsafe {
                 init!(p.product @ render().build(p));
-                init!(p.update = move |p: *mut _| render().update(&mut *p));
+                init!(p.update = move |mut p: NonNull<_>| render().update(p.as_mut()));
 
                 Out::from_raw(p)
             })
@@ -51,21 +52,24 @@ where
 
         let runtime = NonNull::new(Box::into_raw(runtime) as _);
 
-        RUNTIME.with(move |rt| unsafe {
-            *rt.get() = runtime;
-        });
+        RUNTIME.set(runtime);
     }
 }
 
-pub(crate) fn update() {
-    RUNTIME.with(|rt| {
-        let rt = unsafe { &mut *rt.get() };
-        if let Some(runtime) = rt.take() {
-            unsafe { (*runtime.as_ptr()).update() };
-
-            *rt = Some(runtime);
+pub(crate) fn update<F, R>(f: F)
+where
+    F: FnOnce() -> R,
+    R: ShouldRender,
+{
+    if let Some(runtime) = RUNTIME.take() {
+        if f().should_render() {
+            unsafe {
+                (*runtime.as_ptr()).update();
+            }
         }
-    });
+
+        RUNTIME.set(Some(runtime));
+    }
 }
 
 fn init_panic_hook() {

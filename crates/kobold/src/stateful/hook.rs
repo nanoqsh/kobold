@@ -13,7 +13,7 @@ use std::rc::{Rc, Weak};
 use crate::event::{EventCast, Listener};
 use crate::internal::{In, Out};
 use crate::stateful::ShouldRender;
-use crate::View;
+use crate::{runtime, View};
 
 pub struct Signal<S> {
     inner: *const UnsafeCell<S>,
@@ -54,11 +54,7 @@ impl<S> Signal<S> {
         O: ShouldRender,
     {
         if self.drop_flag.strong_count() == 1 {
-            // TODO: Use WithCell here!
-            // if inner.state.with(mutator).should_render() {
-            if mutator(unsafe { &mut *(*self.inner).get() }).should_render() {
-                crate::runtime::update();
-            }
+            runtime::update(|| mutator(unsafe { &mut *(*self.inner).get() }))
         }
     }
 
@@ -191,11 +187,11 @@ impl<S, F> Bound<'_, S, F> {
             // This is fired only as event listener from the DOM, which guarantees that
             // state is not currently borrowed, as events cannot interrupt normal
             // control flow, and `Signal`s cannot borrow state across .await points.
-            let state = unsafe { &mut *(*inner).get() };
+            runtime::update(|| {
+                let state = unsafe { &mut *(*inner).get() };
 
-            if callback(state, e).should_render() {
-                crate::runtime::update();
-            }
+                callback(state, e)
+            })
         };
 
         BoundListener {

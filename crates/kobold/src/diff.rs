@@ -5,6 +5,7 @@
 //! Utilities for diffing values in render functions.
 
 use std::ops::Deref;
+use std::ptr::NonNull;
 
 use web_sys::Node;
 
@@ -248,14 +249,14 @@ impl<T: ?Sized> AsRef<T> for Ref<T> {
 }
 
 impl<T: ?Sized> Diff for &Ref<T> {
-    type Memo = *const ();
+    type Memo = NonNull<()>;
 
     fn into_memo(self) -> Self::Memo {
-        &self.0 as *const _ as *const ()
+        NonNull::from(&self.0).cast()
     }
 
     fn diff(self, memo: &mut Self::Memo) -> bool {
-        let ptr = &self.0 as *const _ as *const ();
+        let ptr = NonNull::from(&self.0).cast();
 
         if ptr != *memo {
             *memo = ptr;
