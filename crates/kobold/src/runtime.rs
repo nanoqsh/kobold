@@ -27,6 +27,8 @@ where
 }
 
 thread_local! {
+    static INIT: Cell<bool> = const { Cell::new(false) };
+
     static RUNTIME: Cell<Option<NonNull<dyn Runtime>>> = const { Cell::new(None) };
 }
 
@@ -36,32 +38,35 @@ where
     F: Fn() -> V + 'static,
     V: View,
 {
-    if let Ok(true) = RUNTIME.try_with(|rt| rt.get().is_none()) {
-        init_panic_hook();
-
-        let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
-            p.in_place(move |p| unsafe {
-                init!(p.product @ render().build(p));
-                init!(p.update = move |mut p: NonNull<_>| render().update(p.as_mut()));
-
-                Out::from_raw(p)
-            })
-        });
-
-        internal::append_body(runtime.product.js());
-
-        let runtime = NonNull::new(Box::into_raw(runtime) as _);
-
-        RUNTIME.set(runtime);
+    if INIT.get() {
+        return;
     }
+    INIT.set(true);
+
+    init_panic_hook();
+
+    let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
+        p.in_place(move |p| unsafe {
+            init!(p.product @ render().build(p));
+            init!(p.update = move |mut p: NonNull<_>| render().update(p.as_mut()));
+
+            Out::from_raw(p)
+        })
+    });
+
+    internal::append_body(runtime.product.js());
+
+    let runtime = NonNull::from(Box::leak(runtime));
+
+    RUNTIME.set(Some(runtime));
 }
 
-pub(crate) fn update<F, R>(f: F)
+pub(crate) fn lock_update<F, R>(f: F)
 where
     F: FnOnce() -> R,
     R: ShouldRender,
 {
-    debug_assert!(RUNTIME.get().is_some(), "Cyclical update detected");
+    debug_assert!(RUNTIME.get().is_none(), "Cyclical update detected");
 
     if let Some(runtime) = RUNTIME.take() {
         if f().should_render() {

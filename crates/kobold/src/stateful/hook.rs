@@ -54,7 +54,9 @@ impl<S> Signal<S> {
         O: ShouldRender,
     {
         if self.drop_flag.strong_count() == 1 {
-            runtime::update(|| mutator(unsafe { &mut *(*self.inner).get() }))
+            let state = unsafe { &mut *(*self.inner).get() };
+
+            runtime::lock_update(move || mutator(state))
         }
     }
 
@@ -179,7 +181,7 @@ impl<S, F> Bound<'_, S, F> {
             // This is fired only as event listener from the DOM, which guarantees that
             // state is not currently borrowed, as events cannot interrupt normal
             // control flow, and `Signal`s cannot borrow state across .await points.
-            runtime::update(|| {
+            runtime::lock_update(|| {
                 let state = unsafe { &mut *(*inner).get() };
 
                 callback(state, e)
