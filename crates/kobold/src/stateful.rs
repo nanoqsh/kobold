@@ -11,14 +11,11 @@
 //! could ever do is render itself once. To get around this the [`stateful`] function can
 //! be used to create views that have ownership over some arbitrary mutable state.
 //!
-use std::cell::UnsafeCell;
-
 use wasm_bindgen::JsValue;
 
 use crate::internal::{In, Out};
 use crate::{init, Mountable, View};
 
-mod cell;
 mod hook;
 mod into_state;
 mod should_render;
@@ -79,7 +76,7 @@ where
 
     fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
         p.in_place(|p| unsafe {
-            let state = init!(p.state = Hook::new(UnsafeCell::new(self.state.init())));
+            let state = init!(p.state = Hook::new(self.state.init()));
 
             init!(p.product @ (self.render)(&*state).build(p));
 

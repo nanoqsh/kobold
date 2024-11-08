@@ -88,9 +88,9 @@ impl<S> Deref for Hook<S> {
 }
 
 impl<S> Hook<S> {
-    pub(crate) const fn new(inner: UnsafeCell<S>) -> Self {
+    pub(crate) const fn new(inner: S) -> Self {
         Hook {
-            inner,
+            inner: UnsafeCell::new(inner),
             drop_flag: UnsafeCell::new(None),
         }
     }
