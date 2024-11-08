@@ -116,17 +116,19 @@ pub struct BoundedVec<T, const N: usize> {
 }
 
 impl<T, const N: usize> BoundedVec<T, N> {
-    pub fn push_in<F>(&mut self, f: F)
+    pub fn push_in<F>(&mut self, f: F) -> bool
     where
         F: FnOnce(In<T>) -> Out<T>,
     {
         if self.len >= N {
-            return;
+            return false;
         }
 
         let _ = f(In(&mut self.data[self.len]));
 
         self.len += 1;
+
+        true
     }
 }
 
@@ -154,8 +156,10 @@ impl<T, const N: usize> BoundedVec<T, N> {
         I: Iterator,
         F: FnMut(I::Item, In<T>) -> Out<T>,
     {
-        for item in iter {
-            self.push_in(|p| f(item, p));
+        for view in iter {
+            if !self.push_in(|p| f(view, p)) {
+                break;
+            }
         }
     }
 }
