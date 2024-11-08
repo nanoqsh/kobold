@@ -3,6 +3,9 @@ name = "kobold_csv_editor_example"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 compact_str = "0.7.0"
 gloo-console = "0.2.3"

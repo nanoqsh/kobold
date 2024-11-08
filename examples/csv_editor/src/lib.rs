@@ -109,6 +109,4 @@ fn cell(col: usize, row: usize, state: &Hook<State>) -> impl View + '_ {
     }
 }
 
-fn main() {
-    kobold::runtime::start(editor);
-}
+kobold::start!(editor);
