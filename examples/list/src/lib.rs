@@ -2,7 +2,7 @@ use kobold::prelude::*;
 
 #[component]
 fn app() -> impl View {
-    let count = state!(0_u32);
+    let count = state!(2_u32);
 
     view! {
         <div>
@@ -31,6 +31,4 @@ fn list_item(n: u32) -> impl View {
     }
 }
 
-fn main() {
-    kobold::runtime::start(app);
-}
+kobold::start!(app);
