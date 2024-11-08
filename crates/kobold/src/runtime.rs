@@ -61,6 +61,8 @@ where
     F: FnOnce() -> R,
     R: ShouldRender,
 {
+    debug_assert!(RUNTIME.get().is_some(), "Cyclical update detected");
+
     if let Some(runtime) = RUNTIME.take() {
         if f().should_render() {
             unsafe {
