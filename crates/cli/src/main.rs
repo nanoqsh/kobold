@@ -1,9 +1,13 @@
 use std::fmt::{self, Debug};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use clap::Parser;
 use leb128::write::unsigned as leb128_write;
+
+mod manifest;
+
+use manifest::manifest;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -158,58 +162,17 @@ fn optimize_wasm(file: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-use serde::Deserialize;
-
-#[derive(Deserialize, Debug)]
-struct Manifest<'a> {
-    name: &'a str,
-    // targets: Vec<Target<'a>>,
-}
-
-// #[derive(Deserialize, Debug)]
-// struct Target<'a> {
-//     name: &'a str,
-//     src_path: &'a Path,
-//     kind: Vec<&'a str>,
-// }
-
-#[derive(Deserialize, Debug)]
-struct Metadata {
-    target_directory: PathBuf,
-}
-
 fn main() -> anyhow::Result<()> {
-    let out = Command::new("cargo").arg("read-manifest").output()?;
-    let manifest: Manifest = serde_json::from_slice(&out.stdout)?;
+    let manifest = manifest()?;
 
-    let mut target = {
-        let out = Command::new("cargo")
-            .args([
-                "metadata",
-                "--format-version=1",
-                "--filter-platform=wasm32-unknown-unknown",
-                "--no-deps",
-            ])
-            .output()?;
-
-        let metadata: Metadata = serde_json::from_slice(&out.stdout)?;
-        metadata.target_directory
-    };
-
-    let output = Command::new("cargo")
-        .args(["build", "--release", "--target=wasm32-unknown-unknown"])
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::piped())
-        .output()?;
-
-    println!("STDERR SIZE: {}", output.stderr.len());
+    let mut target = manifest.target.clone();
 
     target.push("wasm32-unknown-unknown");
     target.push("release");
-    target.push(manifest.name);
+    target.push(&manifest.crate_name);
     target.set_extension("wasm");
 
-    if !target.exists() {
+    if !manifest.target.exists() {
         panic!("Couldn't find compiled Wasm: {target:?}");
     }
 
@@ -220,8 +183,8 @@ fn main() -> anyhow::Result<()> {
         .args(["--out-dir=dist", "--target=web", "--no-typescript"])
         .output()?;
 
-    let input = PathBuf::from(format!("dist/{}.js", manifest.name));
-    let wasm = PathBuf::from(format!("dist/{}_bg.wasm", manifest.name));
+    let input = PathBuf::from(format!("dist/{}.js", manifest.crate_name));
+    let wasm = PathBuf::from(format!("dist/{}_bg.wasm", manifest.crate_name));
 
     optimize_wasm(&wasm)?;
 

@@ -1,5 +1,5 @@
 [package]
-name = "kobold_cli"
+name = "kobold-cli"
 version = "0.10.0"
 authors = ["Maciej Hirsz <hello@maciej.codes>"]
 edition = "2021"
