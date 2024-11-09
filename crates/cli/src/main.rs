@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use clap::Parser;
 use leb128::write::unsigned as leb128_write;
@@ -54,7 +55,11 @@ impl<'source> Wasm<'source> {
             let section = match payload? {
                 Payload::ImportSection(s) => s,
                 Payload::ExportSection(s) => {
-                    println!("Found an export section {:?} {:?}", s.range(), &source[s.range()]);
+                    println!(
+                        "Found an export section {:?} {:?}",
+                        s.range(),
+                        &source[s.range()]
+                    );
 
                     let mut iter = s.into_iter_with_offsets();
 
@@ -140,27 +145,89 @@ impl Debug for Import<'_> {
     }
 }
 
+fn optimize_wasm(file: &Path) -> anyhow::Result<()> {
+    Command::new("wasm-opt")
+        .arg("-Os")
+        .arg(file)
+        .arg("-o")
+        .arg(file)
+        .args(["--enable-simd", "--low-memory-unused"])
+        .spawn()?
+        .wait()?;
+
+    Ok(())
+}
+
+use serde::Deserialize;
+
+#[derive(Deserialize, Debug)]
+struct Manifest<'a> {
+    name: &'a str,
+    // targets: Vec<Target<'a>>,
+}
+
+// #[derive(Deserialize, Debug)]
+// struct Target<'a> {
+//     name: &'a str,
+//     src_path: &'a Path,
+//     kind: Vec<&'a str>,
+// }
+
+#[derive(Deserialize, Debug)]
+struct Metadata {
+    target_directory: PathBuf,
+}
+
 fn main() -> anyhow::Result<()> {
-    let Args { input, wasm } = Args::parse();
+    let out = Command::new("cargo").arg("read-manifest").output()?;
+    let manifest: Manifest = serde_json::from_slice(&out.stdout)?;
 
-    let wasm = wasm.unwrap_or_else(|| {
-        let file = input
-            .file_name()
-            .expect("Missing file name")
-            .to_str()
-            .expect("Invalid characters in file name");
-        let extension = input
-            .extension()
-            .expect("Missing file extension")
-            .to_str()
-            .expect("Invalid characters in file extension");
+    let mut target = {
+        let out = Command::new("cargo")
+            .args([
+                "metadata",
+                "--format-version=1",
+                "--filter-platform=wasm32-unknown-unknown",
+                "--no-deps",
+            ])
+            .output()?;
 
-        if extension != "js" {
-            panic!("Expected a `js` file extension on file: {file}");
-        }
+        let metadata: Metadata = serde_json::from_slice(&out.stdout)?;
+        metadata.target_directory
+    };
 
-        input.with_file_name(format!("{}_bg.wasm", &file[..file.len() - 3]))
-    });
+    let output = Command::new("cargo")
+        .args(["build", "--release", "--target=wasm32-unknown-unknown"])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    println!("STDERR SIZE: {}", output.stderr.len());
+
+    target.push("wasm32-unknown-unknown");
+    target.push("release");
+    target.push(manifest.name);
+    target.set_extension("wasm");
+
+    if !target.exists() {
+        panic!("Couldn't find compiled Wasm: {target:?}");
+    }
+
+    let start = std::time::Instant::now();
+
+    Command::new("wasm-bindgen")
+        .arg(&target)
+        .args(["--out-dir=dist", "--target=web", "--no-typescript"])
+        .output()?;
+
+    let input = PathBuf::from(format!("dist/{}.js", manifest.name));
+    let wasm = PathBuf::from(format!("dist/{}_bg.wasm", manifest.name));
+
+    optimize_wasm(&wasm)?;
+
+    println!("Optimized Wasm in {:?}", start.elapsed());
+
+    // return Ok(());
 
     let wasm_bytes = std::fs::read(&wasm)?;
 
