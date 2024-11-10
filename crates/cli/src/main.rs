@@ -6,6 +6,7 @@ use clap::Parser;
 use leb128::write::unsigned as leb128_write;
 
 mod manifest;
+mod js;
 
 use manifest::manifest;
 
@@ -180,7 +181,7 @@ fn main() -> anyhow::Result<()> {
 
     Command::new("wasm-bindgen")
         .arg(&target)
-        .args(["--out-dir=dist", "--target=web", "--no-typescript"])
+        .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
         .output()?;
 
     let input = PathBuf::from(format!("dist/{}.js", manifest.crate_name));
@@ -203,6 +204,9 @@ fn main() -> anyhow::Result<()> {
     // );
 
     let js = std::fs::read_to_string(&input)?;
+
+    js::transform(&js, &input);
+    panic!();
 
     let mut remaining = js.as_str();
 
