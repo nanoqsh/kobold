@@ -45,8 +45,8 @@
 //!     view! {
 //!         <p>
 //!             <h3>"Counter is at "{ count }</h3>
-//!             <button onclick={do *count += 1}>"Increment"</button>
 //!             <button onclick={do *count -= 1}>"Decrement"</button>
+//!             <button onclick={do *count += 1}>"Increment"</button>
 //!     }
 //! }
 //!
