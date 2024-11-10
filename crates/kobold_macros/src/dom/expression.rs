@@ -56,17 +56,11 @@ impl TryFrom<Group> for Expression {
         if let Some(TokenTree::Ident(ident)) = stream.peek() {
             let span = ident.span();
             let mut is_static = false;
-            let mut deref = false;
             let mut invoke = None;
 
             let keyword = ident.with_str(|ident| match ident {
                 "for" => Some("for"),
                 "use" => Some("use"),
-                "ref" => {
-                    deref = true;
-
-                    Some("ref")
-                }
                 "static" => {
                     is_static = true;
 
@@ -109,7 +103,7 @@ impl TryFrom<Group> for Expression {
                 return Ok(Expression {
                     stream: call(
                         ("::kobold::keywords::", keyword, invoke),
-                        (deref.then_some('&'), stream),
+                        stream,
                     ),
                     span: group.span(),
                     is_static,

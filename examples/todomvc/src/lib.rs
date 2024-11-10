@@ -33,7 +33,7 @@ fn app() -> impl View {
                     <span.todo-count>
                         <strong>{ active_count }</strong>
                         {
-                            ref match active_count {
+                            match active_count {
                                 1 => " item left",
                                 _ => " items left",
                             }
@@ -113,8 +113,8 @@ fn entry<'a>(idx: usize, entry: &'a Entry, state: &'a Hook<State>) -> impl View 
         <li.todo.{editing}.{completed}>
             <div.view>
                 <input.toggle type="checkbox" checked={entry.completed} onchange={do state.toggle(idx)}>
-                <label ondblclick={do state.edit_entry(idx)} >
-                    { ref entry.description }
+                <label ondblclick={do state.edit_entry(idx)}>
+                    { &entry.description }
                 </label>
                 <button.destroy onclick={do state.remove(idx)}>
             </div>

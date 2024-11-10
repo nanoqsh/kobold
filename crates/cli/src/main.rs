@@ -205,8 +205,8 @@ fn main() -> anyhow::Result<()> {
 
     let js = std::fs::read_to_string(&input)?;
 
-    js::transform(&js, &input);
-    panic!();
+    // js::transform(&js, &input);
+    // panic!();
 
     let mut remaining = js.as_str();
 

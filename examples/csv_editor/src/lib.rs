@@ -35,7 +35,7 @@ fn editor() -> impl View {
 
     view! {
         <input type="file" accept="text/csv" onchange={onload}>
-        <h1>{ ref state.name }</h1>
+        <h1>{ &state.name }</h1>
         <table {onkeydown}>
             <thead>
                 <tr>
@@ -66,13 +66,13 @@ fn head(col: usize, state: &Hook<State>) -> impl View + '_ {
 
         view! {
             <th.edit>
-                { ref value }
-                <input.edit.edit-head {onchange} value={ ref value }>
+                { value }
+                <input.edit.edit-head {onchange} {value}>
         }
     } else {
         let ondblclick = state.bind(move |s, _| s.editing = Editing::Column { col });
 
-        view! { <th {ondblclick}>{ ref value } }
+        view! { <th {ondblclick}>{ value } }
     }
 }
 
@@ -99,13 +99,13 @@ fn cell(col: usize, row: usize, state: &Hook<State>) -> impl View + '_ {
 
         view! {
             <td.edit>
-                { ref value }
-                <input.edit {onchange} {onmouseenter} value={ ref value }>
+                { value }
+                <input.edit {onchange} {onmouseenter} {value}>
         }
     } else {
         let ondblclick = state.bind(move |s, _| s.editing = Editing::Cell { row, col });
 
-        view! { <td {ondblclick}>{ ref value } }
+        view! { <td {ondblclick}>{ value } }
     }
 }
 

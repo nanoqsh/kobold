@@ -11,39 +11,6 @@ use oxc::semantic::{ScopeTree, SemanticBuilder, SemanticBuilderReturn, SymbolTab
 use oxc::span::SourceType;
 use oxc::transformer::{TransformOptions, Transformer, TransformerReturn};
 
-use oxc_resolver::{AliasValue, ResolveOptions, Resolver};
-
-fn resolve(source_path: &Path) {
-    let mut path = PathBuf::from(source_path);
-
-    path.pop();
-
-    assert!(
-        path.is_dir(),
-        "{path:?} must be a directory that will be resolved against."
-    );
-    assert!(path.is_absolute(), "{path:?} must be an absolute path.",);
-
-    println!("path: {path:?}");
-
-    let options = ResolveOptions {
-        alias_fields: vec![vec!["browser".into()]],
-        alias: vec![("asdf".into(), vec![AliasValue::from("./test.js")])],
-        extensions: vec![".js".into(), ".ts".into()],
-        extension_alias: vec![(".js".into(), vec![".ts".into(), ".js".into()])],
-        // ESM
-        condition_names: vec!["node".into(), "import".into()],
-        // CJS
-        // condition_names: vec!["node".into(), "require".into()],
-        ..ResolveOptions::default()
-    };
-
-    // match Resolver::new(options).resolve(path, &specifier) {
-    //     Err(error) => println!("Error: {error}"),
-    //     Ok(resolution) => println!("Resolved: {:?}", resolution.full_path()),
-    // }
-}
-
 pub fn transform(source: &str, source_path: &Path) -> anyhow::Result<()> {
     // let mut temp = String::new();
     // let mut snippets = PathBuf::from(source_path);

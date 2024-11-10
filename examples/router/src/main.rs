@@ -50,7 +50,7 @@ fn router_example<'a>(state: &'a Hook<State>, route_number: &'a str) -> impl Vie
         <br>
         <input type="number" {onchange}>
         <br>
-        <!link route={ref state.inventory_url}>{ref state.inventory_url}</!link>
+        <!link route={&state.inventory_url}>{&state.inventory_url}</!link>
 
 
     }

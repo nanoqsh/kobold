@@ -4,7 +4,7 @@
 
 //! Keyword handles for `{ ... }` expressions in the [`view!`](crate::view) macro.
 
-use crate::diff::{Eager, Ref, Static};
+use crate::diff::{Eager, Static};
 use crate::list::{Bounded, List};
 use crate::View;
 
@@ -51,37 +51,6 @@ where
 /// ```
 pub const fn for_bounded<T, const N: usize>(iterator: T) -> List<T, Bounded<N>> {
     List::new_bounded(iterator)
-}
-
-/// `{ ref ... }`: diff this value by its reference address.
-///
-/// For strings this is both faster and more memory efficient (no allocations necessary),
-/// however it might fail to update if underlying memory has been mutated in place without
-/// re-allocations.
-/// ```
-/// use kobold::prelude::*;
-///
-/// struct User {
-///     name: String,
-///     email: String,
-/// }
-///
-/// #[component]
-/// fn user_row(user: &User) -> impl View + '_ {
-///     view! {
-///         <tr>
-///             // If `name` and `email` are always sent to the UI as
-///             // newly allocated `String`s, it's both safe and faster
-///             // to diff them by reference than value.
-///             <td>{ ref user.name }</td>
-///             <td>{ ref user.email }</td>
-///         </tr>
-///     }
-/// }
-/// # fn main() {}
-/// ```
-pub const fn r#ref(value: &str) -> &Ref<str> {
-    unsafe { &*(value as *const _ as *const Ref<str>) }
 }
 
 /// `{ use ... }`: disable diffing for `T` and apply its value to the DOM on every render.

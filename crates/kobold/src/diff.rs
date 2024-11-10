@@ -180,19 +180,21 @@ where
     }
 }
 
-macro_rules! impl_diff_str {
-    ($($ty:ty),*) => {
+macro_rules! impl_diff_ref {
+    ($(&$ty:ty),*) => {
         $(
-            impl Diff for $ty {
-                type Memo = Box<str>;
+            impl Diff for &$ty {
+                type Memo = NonNull<()>;
 
-                fn into_memo(self) -> Box<str> {
-                    AsRef::<str>::as_ref(self).into()
+                fn into_memo(self) -> Self::Memo {
+                    NonNull::from(self).cast()
                 }
 
-                fn diff(self, memo: &mut Box<str>) -> bool {
-                    if AsRef::<str>::as_ref(self) != &**memo {
-                        *memo = AsRef::<str>::as_ref(self).into();
+                fn diff(self, memo: &mut Self::Memo) -> bool {
+                    let new = NonNull::from(self).cast();
+
+                    if new != *memo {
+                        *memo = new;
                         true
                     } else {
                         false
@@ -203,7 +205,7 @@ macro_rules! impl_diff_str {
     };
 }
 
-macro_rules! impl_diff {
+macro_rules! impl_diff_val {
     ($($ty:ty),*) => {
         $(
             impl Diff for $ty {
@@ -226,46 +228,8 @@ macro_rules! impl_diff {
     };
 }
 
-impl_diff_str!(&str, &String, &Box<str>);
-impl_diff!(bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
-
-/// Smart [`View`] that only updates its content when the reference to T has changed.
-/// See [`ref`](crate::keywords::ref).
-#[repr(transparent)]
-pub struct Ref<T: ?Sized>(T);
-
-impl<T: ?Sized> Deref for Ref<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T: ?Sized> AsRef<T> for Ref<T> {
-    fn as_ref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl<T: ?Sized> Diff for &Ref<T> {
-    type Memo = NonNull<()>;
-
-    fn into_memo(self) -> Self::Memo {
-        NonNull::from(&self.0).cast()
-    }
-
-    fn diff(self, memo: &mut Self::Memo) -> bool {
-        let ptr = NonNull::from(&self.0).cast();
-
-        if ptr != *memo {
-            *memo = ptr;
-            true
-        } else {
-            false
-        }
-    }
-}
+impl_diff_ref!(&str, &String);
+impl_diff_val!(bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
 
 /// Smart [`View`] that never performs diffing and instead always triggers
 /// updates.
