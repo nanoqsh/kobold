@@ -184,15 +184,15 @@ macro_rules! impl_diff_str {
     ($($ty:ty),*) => {
         $(
             impl Diff for $ty {
-                type Memo = String;
+                type Memo = Box<str>;
 
-                fn into_memo(self) -> String {
-                    self.into()
+                fn into_memo(self) -> Box<str> {
+                    AsRef::<str>::as_ref(self).into()
                 }
 
-                fn diff(self, memo: &mut String) -> bool {
-                    if self != memo {
-                        self.clone_into(memo);
+                fn diff(self, memo: &mut Box<str>) -> bool {
+                    if AsRef::<str>::as_ref(self) != &**memo {
+                        *memo = AsRef::<str>::as_ref(self).into();
                         true
                     } else {
                         false
@@ -226,7 +226,7 @@ macro_rules! impl_diff {
     };
 }
 
-impl_diff_str!(&str, &String);
+impl_diff_str!(&str, &String, &Box<str>);
 impl_diff!(bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
 
 /// Smart [`View`] that only updates its content when the reference to T has changed.

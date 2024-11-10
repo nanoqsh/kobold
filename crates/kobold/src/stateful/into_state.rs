@@ -30,6 +30,23 @@ where
     }
 }
 
+impl IntoState for &str {
+    type State = String;
+
+    fn init(self) -> Self::State {
+        self.into()
+    }
+
+    fn update(self, state: &mut Self::State) -> Then {
+        if self != state {
+            self.clone_into(state);
+            Then::Render
+        } else {
+            Then::Stop
+        }
+    }
+}
+
 macro_rules! impl_into_state {
     ($($ty:ty),*) => {
         $(
@@ -52,5 +69,5 @@ macro_rules! impl_into_state {
 }
 
 impl_into_state!(
-    &str, &String, bool, u8, u16, u32, u64, u128, usize, isize, i8, i16, i32, i64, i128, f32, f64
+    &String, bool, u8, u16, u32, u64, u128, usize, isize, i8, i16, i32, i64, i128, f32, f64
 );
