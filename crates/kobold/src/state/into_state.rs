@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::diff::Diff;
-use crate::stateful::Then;
+use crate::state::Then;
 
 /// Trait used to create stateful components, see [`stateful`](crate::stateful::stateful) for details.
 pub trait IntoState: Sized {

@@ -26,7 +26,7 @@ fn app() -> impl View {
                         {
                             for state
                                 .filtered_entries()
-                                .map(move |(idx, entry)| view! { <!entry {idx} {entry} {state}> })
+                                .map(move |(idx, e)| entry(idx, e, state))
                         }
                 </section>
                 <footer.footer.{hidden}>
@@ -47,9 +47,9 @@ fn app() -> impl View {
                     <button.clear-completed.{completed_hidden} onclick={do state.clear()}> "Clear completed"
             </section>
             <footer.info>
-                <p> "Double-click to edit a todo"
-                <p> "Written by "<a href="https://maciej.codes/" target="_blank">"Maciej Hirsz"</a>
-                <p> "Part of "<a href="http://todomvc.com/" target="_blank">"TodoMVC"</a>
+                <p>"Double-click to edit a todo"
+                <p>"Written by "<a href="https://maciej.codes/" target="_blank">"Maciej Hirsz"</a>
+                <p>"Part of "<a href="http://todomvc.com/" target="_blank">"TodoMVC"</a>
     }
 }
 

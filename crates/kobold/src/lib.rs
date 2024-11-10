@@ -31,7 +31,7 @@
 //! type will be zero-sized, and its [`View::update`] method will be empty, making updates of static
 //! HTML literally zero-cost._
 //!
-//! ### Hello World!
+//! ### Example
 //!
 //! Components in **Kobold** are created by annotating a _render function_ with a [`#[component]`](component) attribute.
 //!
@@ -39,81 +39,27 @@
 //! use kobold::prelude::*;
 //!
 //! #[component]
-//! fn hello(name: &str) -> impl View + '_ {
+//! fn app() -> impl View {
+//!     let count = state!(0_i32);
+//!
 //!     view! {
-//!         <h1>"Hello "{ name }"!"</h1>
+//!         <p>
+//!             <h3>"Counter is at "{ count }</h3>
+//!             <button onclick={do *count += 1}>"Increment"</button>
+//!             <button onclick={do *count -= 1}>"Decrement"</button>
 //!     }
 //! }
 //!
-//! fn main() {
-//!     kobold::start(view! {
-//!         <!hello name="Kobold">
-//!     });
-//! }
+//! kobold::start!(app);
+//! # fn main() {}
 //! ```
 //!
 //! The component function must return a type that implements the [`View`] trait. Since the [`view!`](view) macro
 //! produces transient locally defined types the best approach here is to always use the opaque `impl View` return type.
 //!
-//! Everything here is statically typed and the macro doesn't delete any information when manipulating the
-//! token stream, so the Rust compiler can tell you when you've made a mistake:
+//! The [`state!`](macro.state.html) macro invocation creates a [`&Hook<i32>`](state::Hook) reference which can be freely read from.
 //!
-//! ```text
-//! error[E0560]: struct `Hello` has no field named `nam`
-//!   --> examples/hello_world/src/main.rs:12:16
-//!    |
-//! 12 |         <!hello nam="Kobold">
-//!    |                 ^^^ help: there is a method with a similar name: `name`
-//! ```
-//!
-//! You can even use [rust-analyzer](https://rust-analyzer.github.io/) to refactor component or field names,
-//! and it will change the invocations inside the macros for you.
-//!
-//! ### State management
-//!
-//! The [`stateful`](stateful::stateful) function can be used to create views that own and manipulate
-//! their state:
-//!
-//! ```no_run
-//! use kobold::prelude::*;
-//!
-//! #[component]
-//! fn counter(init: u32) -> impl View {
-//!     stateful(init, |count| {
-//!         bind! { count:
-//!             // Create an event handler with access to `&mut u32`
-//!             let onclick = move |_event| *count += 1;
-//!         }
-//!
-//!         view! {
-//!             <p>
-//!                 "You clicked the "
-//!                 // `{onclick}` here is shorthand for `onclick={onclick}`
-//!                 <button {onclick}>"Button"</button>
-//!                 " "{ count }" times."
-//!             </p>
-//!         }
-//!     })
-//! }
-//!
-//! fn main() {
-//!     kobold::start(view! {
-//!         <!counter init={0}>
-//!     });
-//! }
-//! ```
-//!
-//! The [`stateful`](stateful::stateful) function takes two parameters:
-//!
-//! * State constructor that implements the [`IntoState`](stateful::IntoState) trait. **Kobold** comes with default
-//!   implementations for most primitive types, so we can use `u32` here.
-//! * The anonymous render closure that uses the constructed state, in our case its argument is `&Hook<u32>`.
-//!
-//! The [`Hook`](stateful::Hook) here is a smart pointer to the state itself that allows non-mutable access to the
-//! state. The [`bind!`](bind) macro can be invoked for any `Hook` to create closures with `&mut` references to the
-//! underlying state.
-//!
-//! For more details visit the [`stateful` module documentation](stateful).
+//! The [`do` keyword](keywords/macro.do.html) is a shorthand for the [`event!](macro.event.html) macro used to create a handler for a DOM event.
 //!
 //! ### Optional parameters
 //!
@@ -129,15 +75,15 @@
 //!     }
 //! }
 //!
-//! # fn main() {
-//! # let _ =
-//! view! {
-//!     // Status code was 200
-//!     <!status>
-//!     // Status code was 404
-//!     <!status code={404}>
-//! }
-//! # ; }
+//! kobold::start!(|| {
+//!     view! {
+//!         // Status code was 200
+//!         <!status>
+//!         // Status code was 404
+//!         <!status code={404}>
+//!     }
+//! });
+//! # fn main() {}
 //! ```
 //!
 //! For more details visit the [`#[component]` macro documentation](component#optional-parameters-componentparam).
@@ -219,18 +165,20 @@
 //! ```no_run
 //! use kobold::prelude::*;
 //!
-//! #[component(children)]
+//! #[component]
 //! fn header(children: impl View) -> impl View {
 //!     view! {
 //!         <header><h1>{ children }</h1></header>
 //!     }
 //! }
 //!
-//! fn main() {
-//!     kobold::start(view! {
+//! #[component]
+//! fn body() -> impl View {
+//!     view! {
 //!         <!header>"Hello Kobold"</!header>
-//!     });
+//!     }
 //! }
+//! # fn main() {}
 //! ```
 //!
 //! You can change the name of the parameter used and even set it to a concrete:
@@ -245,14 +193,16 @@
 //!     n + 10
 //! }
 //!
-//! fn main() {
-//!     kobold::start(view! {
+//! #[component]
+//! fn body() -> impl View {
+//!     view! {
 //!         <p>
 //!             "Meaning of life is "
 //!             <!add_ten>{ 32 }</!add_ten>
 //!         </p>
-//!     });
+//!     }
 //! }
+//! # fn main() {}
 //! ```
 //!
 //! ## More Examples
@@ -422,7 +372,7 @@ pub mod runtime;
 
 mod value;
 
-pub mod stateful;
+pub mod state;
 
 use internal::{In, Out};
 
@@ -434,8 +384,8 @@ use internal::{In, Out};
 /// ```
 pub mod prelude {
     pub use crate::event::{Event, KeyboardEvent, MouseEvent};
-    pub use crate::stateful::{stateful, Hook, IntoState, Signal, Then};
-    pub use crate::{bind, class, event, state};
+    pub use crate::state::{stateful, Hook, IntoState, Signal, Then};
+    pub use crate::{class, event, state};
     pub use crate::{component, view, View};
 }
 
@@ -537,41 +487,7 @@ where
     }
 }
 
-/// Binds a closure to a given [`Hook`](stateful::Hook). In practice:
-///
-/// ```
-/// # use kobold::{bind, stateful::Hook};
-/// # fn test(count: &Hook<i32>) {
-/// bind! { count:
-///     let increment = move |_| *count += 1;
-///     let decrement = move |_| *count -= 1;
-/// }
-/// # fn throwaway(_: kobold::stateful::Bound<i32, impl FnMut(&mut i32, kobold::reexport::web_sys::Event)>) {}
-/// # throwaway(increment);
-/// # throwaway(decrement);
-/// # }
-/// ```
-/// Desugars into:
-///
-/// ```
-/// # use kobold::{bind, stateful::Hook};
-/// # fn test(count: &Hook<i32>) {
-/// let increment = count.bind(move |count, _| *count += 1);
-/// let decrement = count.bind(move |count, _| *count -= 1);
-/// # fn throwaway(_: kobold::stateful::Bound<i32, impl FnMut(&mut i32, kobold::reexport::web_sys::Event)>) {}
-/// # throwaway(increment);
-/// # throwaway(decrement);
-/// # }
-/// ```
-#[macro_export]
-macro_rules! bind {
-    ($hook:ident: $(let $v:ident = move |$e:tt $(: $e_ty:ty)?| $body:expr;)+) => {
-        $(
-            let $v = $hook.bind(move |$hook, $e $(: $e_ty)*| $body);
-        )*
-    };
-}
-
+// TODO: docs!
 #[macro_export]
 macro_rules! state {
     ($($dat:tt)*) => {
@@ -583,19 +499,21 @@ macro_rules! state {
     };
 }
 
+// TODO: docs!
 #[macro_export]
 macro_rules! start {
     ($root:expr) => {
-        use $crate::reexport::wasm_bindgen;
         use wasm_bindgen::prelude::wasm_bindgen;
+        use $crate::reexport::wasm_bindgen;
 
         #[wasm_bindgen(start)]
-        fn main() {
+        fn kobold_main() {
             $crate::runtime::start($root);
         }
     };
 }
 
+// TODO: docs!
 #[macro_export]
 macro_rules! event {
     (move |$state:ident| $body:expr) => {

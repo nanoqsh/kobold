@@ -5,7 +5,7 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
-use crate::stateful::ShouldRender;
+use crate::state::ShouldRender;
 use crate::{init, internal, In, Mountable, Out, View};
 
 struct RuntimeData<P, F> {
