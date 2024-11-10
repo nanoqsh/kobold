@@ -4,36 +4,55 @@
 
 use std::fmt::{self, Debug, Display, Write};
 use std::hash::{Hash, Hasher};
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicU16, Ordering};
 
 use crate::diff::{Diff, Fence};
 use crate::View;
 
-#[inline]
-fn unique() -> u16 {
-    // On single-threaded Wasm this compiles to effectively just a static `u16`.
-    static UNIQUE2: AtomicU16 = AtomicU16::new(0);
-
-    UNIQUE2.fetch_add(1, Ordering::Relaxed)
-}
-
 pub struct Ver<T> {
     inner: T,
 
-    /// The versioning is _probabilistically_ unique:
+    /// The versioning is represented as two `u16`s:
     ///
-    /// * The high 16 bits come from the `unique()`.
-    /// * The low 16 bits start zeroed and increment on each mut access.
-    ///
-    /// The high bits guarantee that swapping two `Ver<T>`s around in memory
-    /// (in a list view for example) will result in a diff.
-    ///
-    /// The low bits guarantee that we diff if `T` has been mutably accessed.
-    /// 16 bits might seem like a low number, but for our purposes the
-    /// odds of someone doing _exactly_ 65536 mutations in-between renders
-    /// are effectively none.
+    /// * The high 16 bits are unchanging.
+    /// * The low 16 bits increment on each mut access.
     ver: [u16; 2],
+}
+
+union Noise<T> {
+    val: ManuallyDrop<T>,
+    ver_u32: u32,
+    ver_u16: u16,
+    ver_u8: u8,
+}
+
+/// We try to get some noise from some type `T`.
+/// This ideally is a pointer from a smart pointer type
+/// like `String`, but it could really be anything.
+fn with_noise<T>(item: T) -> (T, [u16; 2]) {
+    unsafe {
+        let noise = Noise {
+            val: ManuallyDrop::new(item),
+        };
+
+        // Try to get the most fitting version value
+        // based on the size_of::<T>();
+        //
+        // We do this to make sure we never read from
+        // uninitialized memory.
+        let ver = if size_of::<T>() >= size_of::<u32>() {
+            (noise.ver_u32 ^ (noise.ver_u32 >> 16)) as u16
+        } else if size_of::<T>() >= size_of::<u16>() {
+            noise.ver_u16
+        } else if size_of::<T>() == 1 {
+            noise.ver_u8 as u16
+        } else {
+            0
+        };
+
+        (ManuallyDrop::into_inner(noise.val), [ver, 0])
+    }
 }
 
 impl<T> Ver<T> {
@@ -41,10 +60,9 @@ impl<T> Ver<T> {
     where
         U: Into<T>,
     {
-        Ver {
-            inner: val.into(),
-            ver: [unique(), 0],
-        }
+        let (inner, ver) = with_noise(val.into());
+
+        Ver { inner, ver }
     }
 
     pub const fn fence<V, F>(&self, render: F) -> Fence<[u16; 2], F>
