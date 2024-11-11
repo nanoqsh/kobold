@@ -63,6 +63,20 @@ pub struct ListIter<'a, P> {
     next: Option<&'a mut Node<P>>,
 }
 
+impl<'a, P> ListIter<'a, P> {
+    pub fn has_next(&self) -> bool {
+        self.next.is_some()
+    }
+
+    pub unsafe fn next_unchecked(&mut self) -> &'a mut P {
+        let node = self.next.take().unwrap_unchecked();
+
+        self.next = node.next.as_deref_mut();
+
+        &mut node.item
+    }
+}
+
 impl<'a, P> Iterator for ListIter<'a, P> {
     type Item = &'a mut P;
 
@@ -93,9 +107,6 @@ mod tests {
 
         list.push(|n| n.put(0xDEADBEEF));
 
-        assert_eq!(
-            &[42, 1337, 0xDEADBEEF][..],
-            list.iter().map(|n| *n).collect::<Vec<_>>()
-        );
+        assert_eq!(&[42, 1337, 0xDEADBEEF][..], list.iter().map(|n| *n).collect::<Vec<_>>());
     }
 }

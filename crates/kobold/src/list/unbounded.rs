@@ -46,11 +46,12 @@ impl<P: Mountable> ListProduct<P> {
         let mut updated = 0;
         let mut list = self.list.iter();
 
-        while let Some(old) = list.next() {
+        while list.has_next() {
             let Some(new) = iter.next() else {
-                old.unmount();
                 break;
             };
+
+            let old = unsafe { list.next_unchecked() };
 
             new.update(old);
             updated += 1;
@@ -60,15 +61,18 @@ impl<P: Mountable> ListProduct<P> {
             }
         }
 
-        let unmount = updated < self.mounted;
-
-        self.mounted = updated;
-
-        if unmount {
+        if updated < self.mounted {
             while let Some(old) = list.next() {
                 old.unmount();
+
+                self.mounted -= 1;
+
+                if updated == self.mounted {
+                    break;
+                }
             }
         } else {
+            self.mounted = updated;
             self.extend(iter);
         }
     }
