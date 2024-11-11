@@ -44,11 +44,12 @@ impl<P: Mountable> ListProduct<P> {
         I::Item: View<Product = P>,
     {
         let mut list = self.list.iter();
-        let mut updated = 0;
 
         while let Some(mut old) = list.next() {
             let Some(new) = iter.next() else {
-                self.mounted = updated;
+                list.limit(self.mounted);
+
+                self.mounted = list.pos() - 1;
 
                 loop {
                     old.unmount();
@@ -63,13 +64,9 @@ impl<P: Mountable> ListProduct<P> {
 
             new.update(old);
 
-            updated += 1;
-
-            if updated > self.mounted {
+            if list.pos() > self.mounted {
                 self.fragment.append(old.js());
             }
-
-            list.next();
         }
 
         self.extend(iter);

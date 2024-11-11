@@ -1,26 +1,41 @@
+use std::marker::PhantomData;
+use std::mem::MaybeUninit;
 use std::ptr::NonNull;
-use std::{marker::PhantomData, mem::replace};
 
 use crate::internal::{init, In, Out};
 
 struct Node<P> {
     item: P,
-    next: Next<P>,
+    next: Next<Node<P>>,
 }
 
-type Next<P> = Option<Box<Node<P>>>;
+type Next<T> = MaybeUninit<Box<T>>;
 
 pub struct LinkedList<P> {
-    head: Option<Box<Node<P>>>,
-    tail: NonNull<Next<P>>,
+    head: Next<Node<P>>,
+    tail: NonNull<Next<Node<P>>>,
+    len: usize,
+}
+
+impl<P> Drop for LinkedList<P> {
+    fn drop(&mut self) {
+        for _ in 0..self.len {
+            let node = unsafe { self.head.assume_init_read() };
+
+            self.head = node.next;
+
+            drop(node.item);
+        }
+    }
 }
 
 impl<P> LinkedList<P> {
     pub fn build(p: In<Self>) -> Out<Self> {
         p.in_place(|p| unsafe {
-            let head = &mut *init!(p.head = None);
+            let tail = NonNull::new_unchecked(&raw mut (*p).head);
 
-            init!(p.tail = NonNull::from(&*head).cast());
+            init!(p.tail = tail);
+            init!(p.len = 0);
 
             Out::from_raw(p)
         })
@@ -33,33 +48,42 @@ impl<P> LinkedList<P> {
         let node = In::boxed(|node: In<Node<P>>| {
             node.in_place(move |p| unsafe {
                 init!(p.item @ constructor(p));
-                init!(p.next = None);
 
                 Out::from_raw(p)
             })
         });
 
-        // Update the tail to the `next` field of the newly created
-        // `Node`, get the old pointer.
-        let tail = replace(&mut self.tail, NonNull::from(&node.next));
+        let node = unsafe { self.tail.as_mut().write(node) };
 
-        unsafe {
-            // Assign the node to old tail
-            *tail.as_ptr() = Some(node);
-        }
+        self.tail = NonNull::from(&node.next);
+        self.len += 1;
     }
 
     pub fn iter(&mut self) -> ListIter<P> {
         ListIter {
-            next: NonNull::from(&mut self.head),
+            pos: 0,
+            end: self.len,
+            next: NonNull::from(&self.head),
             _lt: PhantomData,
         }
     }
 }
 
 pub struct ListIter<'a, P> {
-    next: NonNull<Option<Box<Node<P>>>>,
+    pos: usize,
+    end: usize,
+    next: NonNull<Next<Node<P>>>,
     _lt: PhantomData<&'a ()>,
+}
+
+impl<P> ListIter<'_, P> {
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    pub fn limit(&mut self, limit: usize) {
+        self.end = std::cmp::min(self.end, limit);
+    }
 }
 
 impl<'a, P> Iterator for ListIter<'a, P>
@@ -69,14 +93,16 @@ where
     type Item = &'a mut P;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match unsafe { self.next.as_mut() } {
-            Some(ref mut node) => {
-                self.next = NonNull::from(&mut node.next);
-
-                Some(&mut node.item)
-            }
-            None => None,
+        if self.pos >= self.end {
+            return None;
         }
+
+        let node = unsafe { self.next.as_mut().assume_init_mut() };
+
+        self.next = NonNull::from(&node.next);
+        self.pos += 1;
+
+        Some(&mut node.item)
     }
 }
 
