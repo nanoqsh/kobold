@@ -12,10 +12,10 @@ use crate::{Mountable, View};
 
 mod list;
 
-use list::List;
+use list::LinkedList;
 
 pub struct ListProduct<P: Mountable> {
-    list: List<P>,
+    list: LinkedList<P>,
     mounted: usize,
     fragment: FragmentBuilder,
 }
@@ -27,7 +27,7 @@ impl<P: Mountable> ListProduct<P> {
         I::Item: View<Product = P>,
     {
         let mut list = p.in_place(|p| unsafe {
-            init!(p.list @ List::build(p));
+            init!(p.list @ LinkedList::build(p));
             init!(p.mounted = 0);
             init!(p.fragment = FragmentBuilder::new());
 
@@ -43,21 +43,21 @@ impl<P: Mountable> ListProduct<P> {
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        let mut updated = 0;
         let mut list = self.list.iter();
+        let mut updated = 0;
 
-        while let Some(mut old) = list.next() {
+        while let Some(old) = list.peek() {
             let Some(new) = iter.next() else {
-                while updated < self.mounted {
-                    old.unmount();
-
-                    old = unsafe { list.next_unchecked() };
-
-                    self.mounted -= 1;
-                }
                 self.mounted = updated;
+
+                for old in list {
+                    old.unmount();
+                }
+
                 return;
             };
+
+            new.update(old);
 
             updated += 1;
 
@@ -65,10 +65,9 @@ impl<P: Mountable> ListProduct<P> {
                 self.fragment.append(old.js());
             }
 
-            new.update(old);
+            list.next();
         }
 
-        self.mounted = updated;
         self.extend(iter);
     }
 
@@ -78,10 +77,13 @@ impl<P: Mountable> ListProduct<P> {
         I::Item: View<Product = P>,
     {
         for view in iter {
-            let built = self.list.push(move |p| view.build(p));
+            self.list.push(|p| {
+                let built = view.build(p);
 
-            self.fragment.append(built.js());
-            self.mounted += 1;
+                self.fragment.append(built.js());
+
+                built
+            });
         }
     }
 }

@@ -1,5 +1,5 @@
-use std::mem::replace;
 use std::ptr::NonNull;
+use std::{marker::PhantomData, mem::replace};
 
 use crate::internal::{init, In, Out};
 
@@ -10,12 +10,12 @@ struct Node<P> {
 
 type Next<P> = Option<Box<Node<P>>>;
 
-pub struct List<P> {
+pub struct LinkedList<P> {
     head: Option<Box<Node<P>>>,
     tail: NonNull<Next<P>>,
 }
 
-impl<P> List<P> {
+impl<P> LinkedList<P> {
     pub fn build(p: In<Self>) -> Out<Self> {
         p.in_place(|p| unsafe {
             let head = &mut *init!(p.head = None);
@@ -26,7 +26,7 @@ impl<P> List<P> {
         })
     }
 
-    pub fn push<F>(&mut self, constructor: F) -> &mut P
+    pub fn push<F>(&mut self, constructor: F)
     where
         F: FnOnce(In<P>) -> Out<P>,
     {
@@ -42,48 +42,45 @@ impl<P> List<P> {
         // Update the tail to the `next` field of the newly created
         // `Node`, get the old pointer.
         let tail = replace(&mut self.tail, NonNull::from(&node.next));
-        let ret = NonNull::from(&node.item);
 
         unsafe {
             // Assign the node to old tail
             *tail.as_ptr() = Some(node);
-
-            &mut *ret.as_ptr()
         }
     }
 
     pub fn iter(&mut self) -> ListIter<P> {
         ListIter {
-            next: self.head.as_deref_mut(),
+            next: NonNull::from(&mut self.head),
+            _lt: PhantomData,
         }
     }
 }
 
 pub struct ListIter<'a, P> {
-    next: Option<&'a mut Node<P>>,
+    next: NonNull<Option<Box<Node<P>>>>,
+    _lt: PhantomData<&'a ()>,
 }
 
 impl<'a, P> ListIter<'a, P> {
-    pub fn has_next(&self) -> bool {
-        self.next.is_some()
-    }
-
-    pub unsafe fn next_unchecked(&mut self) -> &'a mut P {
-        let node = self.next.take().unwrap_unchecked();
-
-        self.next = node.next.as_deref_mut();
-
-        &mut node.item
+    pub fn peek(&mut self) -> Option<&mut P> {
+        match unsafe { self.next.as_mut() } {
+            Some(ref mut node) => Some(&mut node.item),
+            None => None,
+        }
     }
 }
 
-impl<'a, P> Iterator for ListIter<'a, P> {
+impl<'a, P> Iterator for ListIter<'a, P>
+where
+    P: 'a,
+{
     type Item = &'a mut P;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.next.take() {
-            Some(node) => {
-                self.next = node.next.as_deref_mut();
+        match unsafe { self.next.as_mut() } {
+            Some(ref mut node) => {
+                self.next = NonNull::from(&mut node.next);
 
                 Some(&mut node.item)
             }
@@ -98,7 +95,7 @@ mod tests {
 
     #[test]
     fn iterator() {
-        let mut list = In::boxed(List::<u32>::build);
+        let mut list = In::boxed(LinkedList::<u32>::build);
 
         list.push(|n| n.put(42));
         list.push(|n| n.put(1337));
@@ -107,6 +104,9 @@ mod tests {
 
         list.push(|n| n.put(0xDEADBEEF));
 
-        assert_eq!(&[42, 1337, 0xDEADBEEF][..], list.iter().map(|n| *n).collect::<Vec<_>>());
+        assert_eq!(
+            &[42, 1337, 0xDEADBEEF][..],
+            list.iter().map(|n| *n).collect::<Vec<_>>()
+        );
     }
 }
