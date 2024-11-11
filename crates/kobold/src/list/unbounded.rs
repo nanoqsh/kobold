@@ -7,11 +7,15 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::internal::{In, Out};
+use crate::internal::{init, In, Out};
 use crate::{Mountable, View};
 
+mod list;
+
+use list::List;
+
 pub struct ListProduct<P: Mountable> {
-    list: Vec<Box<P>>,
+    list: List<P>,
     mounted: usize,
     fragment: FragmentBuilder,
 }
@@ -22,10 +26,12 @@ impl<P: Mountable> ListProduct<P> {
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        let mut list = p.put(ListProduct {
-            list: Vec::new(),
-            mounted: 0,
-            fragment: FragmentBuilder::new(),
+        let mut list = p.in_place(|p| unsafe {
+            init!(p.list @ List::build(p));
+            init!(p.mounted = 0);
+            init!(p.fragment = FragmentBuilder::new());
+
+            Out::from_raw(p)
         });
 
         list.extend(iter);
@@ -38,25 +44,31 @@ impl<P: Mountable> ListProduct<P> {
         I::Item: View<Product = P>,
     {
         let mut updated = 0;
+        let mut list = self.list.iter();
 
-        while let Some(old) = self.list.get_mut(updated) {
+        while let Some(old) = list.next() {
             let Some(new) = iter.next() else {
-                break;
+                self.mounted = updated;
+
+                old.unmount();
+
+                for old in list {
+                    old.unmount();
+                }
+
+                return;
             };
 
             new.update(old);
             updated += 1;
-        }
 
-        if updated < self.mounted {
-            self.unmount(updated);
-        } else {
-            self.mount(updated);
-
-            if updated == self.list.len() {
-                self.extend(iter);
+            if updated > self.mounted {
+                self.fragment.append(old.js());
             }
         }
+
+        self.mounted = updated;
+        self.extend(iter);
     }
 
     fn extend<I>(&mut self, iter: I)
@@ -64,33 +76,12 @@ impl<P: Mountable> ListProduct<P> {
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        self.list.extend(iter.map(|view| {
-            let built = In::boxed(|p| view.build(p));
+        for view in iter {
+            let built = self.list.push(move |p| view.build(p));
 
             self.fragment.append(built.js());
-
-            built
-        }));
-
-        self.mounted = self.list.len();
-    }
-
-    fn unmount(&mut self, from: usize) {
-        debug_assert!(self.list.get(from..self.mounted).is_some());
-
-        for p in unsafe { self.list.get_unchecked(from..self.mounted).iter() } {
-            p.unmount();
+            self.mounted += 1;
         }
-        self.mounted = from;
-    }
-
-    fn mount(&mut self, to: usize) {
-        debug_assert!(self.list.get(self.mounted..to).is_some());
-
-        for p in unsafe { self.list.get_unchecked(self.mounted..to).iter() } {
-            self.fragment.append(p.js());
-        }
-        self.mounted = to;
     }
 }
 

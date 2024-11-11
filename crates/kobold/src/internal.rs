@@ -185,6 +185,7 @@ macro_rules! init {
         $crate::internal::In::raw(&raw mut (*$p).$field, |$p| $p.put($val))
     };
 }
+pub use init;
 
 /// Wrapper that turns `extern` precompiled JavaScript functions into [`View`]s.
 #[repr(transparent)]
