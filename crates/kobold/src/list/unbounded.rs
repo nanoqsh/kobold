@@ -46,12 +46,16 @@ impl<P: Mountable> ListProduct<P> {
         let mut list = self.list.iter();
         let mut updated = 0;
 
-        while let Some(old) = list.peek() {
+        while let Some(mut old) = list.next() {
             let Some(new) = iter.next() else {
                 self.mounted = updated;
 
-                for old in list {
+                loop {
                     old.unmount();
+                    old = match list.next() {
+                        Some(p) => p,
+                        None => break,
+                    };
                 }
 
                 return;

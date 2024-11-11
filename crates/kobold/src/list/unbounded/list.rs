@@ -62,15 +62,6 @@ pub struct ListIter<'a, P> {
     _lt: PhantomData<&'a ()>,
 }
 
-impl<'a, P> ListIter<'a, P> {
-    pub fn peek(&mut self) -> Option<&mut P> {
-        match unsafe { self.next.as_mut() } {
-            Some(ref mut node) => Some(&mut node.item),
-            None => None,
-        }
-    }
-}
-
 impl<'a, P> Iterator for ListIter<'a, P>
 where
     P: 'a,
