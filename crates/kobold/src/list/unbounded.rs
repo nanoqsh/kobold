@@ -46,35 +46,30 @@ impl<P: Mountable> ListProduct<P> {
         let mut updated = 0;
         let mut list = self.list.iter();
 
-        while list.has_next() {
+        while let Some(mut old) = list.next() {
             let Some(new) = iter.next() else {
-                break;
+                while updated < self.mounted {
+                    old.unmount();
+
+                    old = unsafe { list.next_unchecked() };
+
+                    self.mounted -= 1;
+                }
+                self.mounted = updated;
+                return;
             };
 
-            let old = unsafe { list.next_unchecked() };
-
-            new.update(old);
             updated += 1;
 
             if updated > self.mounted {
                 self.fragment.append(old.js());
             }
+
+            new.update(old);
         }
 
-        if updated < self.mounted {
-            while let Some(old) = list.next() {
-                old.unmount();
-
-                self.mounted -= 1;
-
-                if updated == self.mounted {
-                    break;
-                }
-            }
-        } else {
-            self.mounted = updated;
-            self.extend(iter);
-        }
+        self.mounted = updated;
+        self.extend(iter);
     }
 
     fn extend<I>(&mut self, iter: I)
