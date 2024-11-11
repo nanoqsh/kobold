@@ -180,18 +180,18 @@ where
     }
 }
 
-macro_rules! impl_diff_ref {
+macro_rules! impl_diff_str {
     ($(&$ty:ty),*) => {
         $(
             impl Diff for &$ty {
                 type Memo = NonNull<()>;
 
                 fn into_memo(self) -> Self::Memo {
-                    NonNull::from(self).cast()
+                    NonNull::from(AsRef::<str>::as_ref(self)).cast()
                 }
 
                 fn diff(self, memo: &mut Self::Memo) -> bool {
-                    let new = NonNull::from(self).cast();
+                    let new = NonNull::from(AsRef::<str>::as_ref(self)).cast();
 
                     if new != *memo {
                         *memo = new;
@@ -228,7 +228,7 @@ macro_rules! impl_diff_val {
     };
 }
 
-impl_diff_ref!(&str, &String);
+impl_diff_str!(&str, &String);
 impl_diff_val!(bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
 
 /// Smart [`View`] that never performs diffing and instead always triggers
