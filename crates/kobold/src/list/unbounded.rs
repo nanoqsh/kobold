@@ -48,15 +48,8 @@ impl<P: Mountable> ListProduct<P> {
 
         while let Some(old) = list.next() {
             let Some(new) = iter.next() else {
-                self.mounted = updated;
-
                 old.unmount();
-
-                for old in list {
-                    old.unmount();
-                }
-
-                return;
+                break;
             };
 
             new.update(old);
@@ -67,8 +60,17 @@ impl<P: Mountable> ListProduct<P> {
             }
         }
 
+        let unmount = updated < self.mounted;
+
         self.mounted = updated;
-        self.extend(iter);
+
+        if unmount {
+            while let Some(old) = list.next() {
+                old.unmount();
+            }
+        } else {
+            self.extend(iter);
+        }
     }
 
     fn extend<I>(&mut self, iter: I)

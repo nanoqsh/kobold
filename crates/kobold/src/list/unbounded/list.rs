@@ -10,12 +10,6 @@ struct Node<P> {
 
 type Next<P> = Option<Box<Node<P>>>;
 
-impl<P> Node<P> {
-    fn new(item: P) -> Box<Self> {
-        Box::new(Node { item, next: None })
-    }
-}
-
 pub struct List<P> {
     head: Option<Box<Node<P>>>,
     tail: NonNull<Next<P>>,
@@ -99,6 +93,9 @@ mod tests {
 
         list.push(|n| n.put(0xDEADBEEF));
 
-        assert_eq!(&[42, 1337, 0xDEADBEEF][..], list.iter().map(|n| *n).collect::<Vec<_>>());
+        assert_eq!(
+            &[42, 1337, 0xDEADBEEF][..],
+            list.iter().map(|n| *n).collect::<Vec<_>>()
+        );
     }
 }
