@@ -9,7 +9,7 @@ struct Node<P> {
     next: Next<Node<P>>,
 }
 
-type Next<T> = MaybeUninit<Box<T>>;
+type Next<T> = MaybeUninit<NonNull<T>>;
 
 pub struct LinkedList<P> {
     head: Next<Node<P>>,
@@ -20,7 +20,7 @@ pub struct LinkedList<P> {
 impl<P> Drop for LinkedList<P> {
     fn drop(&mut self) {
         for _ in 0..self.len {
-            let node = unsafe { self.head.assume_init_read() };
+            let node = unsafe { Box::from_raw(self.head.assume_init_read().as_ptr()) };
 
             self.head = node.next;
 
@@ -53,9 +53,10 @@ impl<P> LinkedList<P> {
             })
         });
 
-        let node = unsafe { self.tail.as_mut().write(node) };
+        let next = NonNull::from(&node.next);
+        unsafe { self.tail.as_mut().write(Box::leak(node).into()) };
 
-        self.tail = NonNull::from(&node.next);
+        self.tail = next;
         self.len += 1;
     }
 
@@ -63,7 +64,7 @@ impl<P> LinkedList<P> {
         ListIter {
             pos: 0,
             end: self.len,
-            next: NonNull::from(&self.head),
+            next: self.head,
             _lt: PhantomData,
         }
     }
@@ -72,7 +73,7 @@ impl<P> LinkedList<P> {
 pub struct ListIter<'a, P> {
     pos: usize,
     end: usize,
-    next: NonNull<Next<Node<P>>>,
+    next: Next<Node<P>>,
     _lt: PhantomData<&'a ()>,
 }
 
@@ -97,9 +98,9 @@ where
             return None;
         }
 
-        let node = unsafe { self.next.as_mut().assume_init_mut() };
+        let node = unsafe { self.next.assume_init_mut().as_mut() };
 
-        self.next = NonNull::from(&node.next);
+        self.next = node.next;
         self.pos += 1;
 
         Some(&mut node.item)
