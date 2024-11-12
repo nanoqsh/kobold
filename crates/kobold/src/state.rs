@@ -13,7 +13,7 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{EventId, Then};
+use crate::runtime::{Event, Then, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -95,16 +95,21 @@ where
         self.product.js()
     }
 
-    fn trigger(&self, e: EventId) -> Option<Then> {
-        self.product.trigger(e)
-    }
-
     fn unmount(&self) {
         self.product.unmount()
     }
 
     fn replace_with(&self, new: &JsValue) {
         self.product.replace_with(new);
+    }
+}
+
+impl<S, P> Trigger for StatefulProduct<S, P>
+where
+    P: Trigger,
+{
+    fn trigger(&self, e: &Event) -> Option<Then> {
+        self.product.trigger(e)
     }
 }
 
@@ -144,16 +149,21 @@ where
         self.inner.js()
     }
 
-    fn trigger(&self, e: EventId) -> Option<Then> {
-        self.inner.trigger(e)
-    }
-
     fn unmount(&self) {
         self.inner.unmount()
     }
 
     fn replace_with(&self, new: &JsValue) {
         self.inner.replace_with(new);
+    }
+}
+
+impl<S, P, D> Trigger for OnceProduct<S, P, D>
+where
+    StatefulProduct<S, P>: Trigger,
+{
+    fn trigger(&self, e: &Event) -> Option<Then> {
+        self.inner.trigger(e)
     }
 }
 

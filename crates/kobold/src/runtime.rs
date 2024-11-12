@@ -75,6 +75,16 @@ impl EventId {
     }
 }
 
+pub struct Event {
+    eid: EventId,
+}
+
+pub trait Trigger {
+    fn trigger(&self, _: &Event) -> Option<Then> {
+        None
+    }
+}
+
 thread_local! {
     static INIT: Cell<bool> = const { Cell::new(false) };
 

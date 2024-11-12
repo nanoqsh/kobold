@@ -100,7 +100,7 @@ use web_sys::Node;
 
 use crate::dom::Anchor;
 use crate::internal::empty_node;
-use crate::runtime::{EventId, Then};
+use crate::runtime::{Event, Then, Trigger};
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -159,10 +159,10 @@ macro_rules! branch {
                 }
             }
 
-            fn trigger(&self, e: EventId) -> Option<Then> {
+            fn unmount(&self) {
                 match self {
                     $(
-                        $name::$var(p) => p.trigger(e),
+                        $name::$var(p) => p.unmount(),
                     )*
                 }
             }
@@ -174,11 +174,18 @@ macro_rules! branch {
                     )*
                 }
             }
+        }
 
-            fn unmount(&self) {
+        impl<$($var),*> Trigger for $name<$($var),*>
+        where
+            $(
+                $var: Trigger,
+            )*
+        {
+            fn trigger(&self, e: &Event) -> Option<Then> {
                 match self {
                     $(
-                        $name::$var(p) => p.unmount(),
+                        $name::$var(p) => p.trigger(e),
                     )*
                 }
             }
@@ -206,11 +213,9 @@ impl Anchor for EmptyNode {
     fn anchor(&self) -> &Node {
         &self.0
     }
-
-    fn trigger(&self, _: EventId) -> Option<Then> {
-        None
-    }
 }
+
+impl Trigger for EmptyNode {}
 
 impl View for Empty {
     type Product = EmptyNode;

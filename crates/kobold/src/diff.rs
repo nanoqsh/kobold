@@ -11,7 +11,7 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::runtime::{EventId, Then};
+use crate::runtime::{Event, Then, Trigger};
 use crate::value::{IntoText, Value};
 use crate::{Mountable, View};
 
@@ -145,8 +145,13 @@ where
     fn anchor(&self) -> &P {
         &self.inner
     }
+}
 
-    fn trigger(&self, e: EventId) -> Option<Then> {
+impl<D, P> Trigger for Fence<D, P>
+where
+    P: Trigger,
+{
+    fn trigger(&self, e: &Event) -> Option<Then> {
         self.inner.trigger(e)
     }
 }

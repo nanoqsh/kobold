@@ -12,6 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
+use crate::runtime::{self, Then, Trigger};
 
 #[wasm_bindgen]
 extern "C" {
@@ -152,7 +153,7 @@ pub struct ListenerProduct<F, E> {
     _event: PhantomData<E>,
 }
 
-pub trait ListenerHandle {
+pub trait ListenerHandle: Trigger {
     fn js_value(&mut self) -> JsValue;
 }
 
@@ -165,6 +166,12 @@ where
         let vcall: fn(E, *mut ()) = |e, ptr| unsafe { (*(ptr as *mut F))(e) };
 
         internal::make_event_handler((&mut self.closure) as *mut F as *mut (), vcall as usize)
+    }
+}
+
+impl<F, E> Trigger for ListenerProduct<F, E> {
+    fn trigger(&self, _: &runtime::Event) -> Option<Then> {
+        todo!()
     }
 }
 

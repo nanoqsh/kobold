@@ -7,7 +7,7 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{EventId, Then};
+use crate::runtime::{Event, Then, Trigger};
 use crate::{Mountable, View};
 
 pub struct ListProduct<P: Mountable> {
@@ -104,8 +104,13 @@ where
     fn anchor(&self) -> &Fragment {
         &self.fragment
     }
+}
 
-    fn trigger(&self, e: EventId) -> Option<Then> {
+impl<P> Trigger for ListProduct<P>
+where
+    P: Mountable,
+{
+    fn trigger(&self, e: &Event) -> Option<Then> {
         self.list.iter().find_map(|p| p.trigger(e))
     }
 }
