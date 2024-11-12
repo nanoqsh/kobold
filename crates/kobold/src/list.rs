@@ -6,7 +6,6 @@
 
 use std::marker::PhantomData;
 
-use crate::internal::{In, Out};
 use crate::View;
 
 pub mod bounded;
@@ -45,8 +44,8 @@ where
 {
     type Product = ListProduct<<T::Item as View>::Product>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        ListProduct::build(self.0.into_iter(), p)
+    fn build(self) -> Self::Product {
+        ListProduct::build(self.0.into_iter())
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -61,8 +60,8 @@ where
 {
     type Product = BoundedProduct<<T::Item as View>::Product, N>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        BoundedProduct::build(self.0.into_iter(), p)
+    fn build(self) -> Self::Product {
+        BoundedProduct::build(self.0.into_iter())
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -73,8 +72,8 @@ where
 impl<V: View> View for Vec<V> {
     type Product = ListProduct<V::Product>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        List::new(self).build(p)
+    fn build(self) -> Self::Product {
+        List::new(self).build()
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -88,8 +87,8 @@ where
 {
     type Product = ListProduct<<&'a V as View>::Product>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        List::new(self).build(p)
+    fn build(self) -> Self::Product {
+        List::new(self).build()
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -100,8 +99,8 @@ where
 impl<V: View, const N: usize> View for [V; N] {
     type Product = BoundedProduct<V::Product, N>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        List::new_bounded(self).build(p)
+    fn build(self) -> Self::Product {
+        List::new_bounded(self).build()
     }
 
     fn update(self, p: &mut Self::Product) {

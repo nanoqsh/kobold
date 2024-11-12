@@ -6,7 +6,7 @@ use std::cell::Cell;
 use std::ptr::NonNull;
 
 use crate::state::ShouldRender;
-use crate::{init, internal, In, Mountable, Out, View};
+use crate::{internal, Mountable, View};
 
 struct RuntimeData<P, F> {
     product: P,
@@ -23,6 +23,19 @@ where
 {
     fn update(&mut self) {
         (self.update)(NonNull::from(&mut self.product))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct EventId(u32);
+
+impl EventId {
+    pub(crate) fn next() -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static ID: AtomicU32 = AtomicU32::new(0);
+
+        EventId(ID.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -45,13 +58,9 @@ where
 
     init_panic_hook();
 
-    let runtime = In::boxed(move |p: In<RuntimeData<_, _>>| {
-        p.in_place(move |p| unsafe {
-            init!(p.product @ render().build(p));
-            init!(p.update = move |mut p: NonNull<_>| render().update(p.as_mut()));
-
-            Out::from_raw(p)
-        })
+    let runtime = Box::new(RuntimeData {
+        product: render().build(),
+        update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
     });
 
     internal::append_body(runtime.product.js());

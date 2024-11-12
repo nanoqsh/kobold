@@ -203,8 +203,8 @@ where
 {
     type Product = Node;
 
-    fn build(self, p: In<Node>) -> Out<Node> {
-        p.put(self.0())
+    fn build(self) -> Node {
+        self.0()
     }
 
     fn update(self, _: &mut Node) {}

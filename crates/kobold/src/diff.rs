@@ -11,9 +11,9 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::internal::{In, Out};
+use crate::runtime::EventId;
 use crate::value::{IntoText, Value};
-use crate::{init, Mountable, View};
+use crate::{Mountable, View};
 
 mod ver;
 
@@ -63,47 +63,49 @@ where
     }
 }
 
-/// Create a wrapper around a `view` that will prevent updates to it.
-///
-/// This is effectively an unconditional [`fence`].
-///
-/// ```
-/// use kobold::prelude::*;
-/// use kobold::diff::invar;
-///
-/// #[component]
-/// fn tag(label: &'static str) -> impl View {
-///     invar(move || view! {
-///         <span.tag>{ static label }</span>
-///     })
-/// }
-/// # fn main() {}
-/// ```
-pub const fn invar<F, V>(render: F) -> Invar<F>
-where
-    F: FnOnce() -> V,
-    V: View,
-{
-    Invar(render)
-}
+// TODO! WTF IS THIS HERE FOR IF WE HAVE THE `static` KEYWORD?!
+//
+// /// Create a wrapper around a `view` that will prevent updates to it.
+// ///
+// /// This is effectively an unconditional [`fence`].
+// ///
+// /// ```
+// /// use kobold::prelude::*;
+// /// use kobold::diff::invar;
+// ///
+// /// #[component]
+// /// fn tag(label: &'static str) -> impl View {
+// ///     invar(move || view! {
+// ///         <span.tag>{ static label }</span>
+// ///     })
+// /// }
+// /// # fn main() {}
+// /// ```
+// pub const fn invar<F, V>(render: F) -> Invar<F>
+// where
+//     F: FnOnce() -> V,
+//     V: View,
+// {
+//     Invar(render)
+// }
 
-/// Smart [`View`] that prevents updates, see [`invar`].
-#[repr(transparent)]
-pub struct Invar<F>(F);
+// /// Smart [`View`] that prevents updates, see [`invar`].
+// #[repr(transparent)]
+// pub struct Invar<F>(F);
 
-impl<V, F> View for Invar<F>
-where
-    F: FnOnce() -> V,
-    V: View,
-{
-    type Product = V::Product;
+// impl<V, F> View for Invar<F>
+// where
+//     F: FnOnce() -> V,
+//     V: View,
+// {
+//     type Product = V::Product;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        (self.0)().build(p)
-    }
+//     fn build(self) -> Self::Product {
+//         (self.0)().build()
+//     }
 
-    fn update(self, _: &mut Self::Product) {}
-}
+//     fn update(self, _: &mut Self::Product) {}
+// }
 
 /// Smart [`View`] that guards against unnecessary renders, see [`fence`].
 pub struct Fence<D, F> {
@@ -119,13 +121,11 @@ where
 {
     type Product = Fence<D::Memo, V::Product>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        p.in_place(|p| unsafe {
-            init!(p.guard = self.guard.into_memo());
-            init!(p.inner @ (self.inner)().build(p));
-
-            Out::from_raw(p)
-        })
+    fn build(self) -> Self::Product {
+        Fence {
+            guard: self.guard.into_memo(),
+            inner: (self.inner)().build(),
+        }
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -144,6 +144,10 @@ where
 
     fn anchor(&self) -> &P {
         &self.inner
+    }
+
+    fn trigger(&self, e: EventId) -> bool {
+        self.inner.trigger(e)
     }
 }
 
@@ -263,8 +267,8 @@ macro_rules! impl_no_diff {
         {
             type Product = Node;
 
-            fn build(self, p: In<Node>) -> Out<Node> {
-                p.put(self.into_text())
+            fn build(self) -> Node {
+                self.into_text()
             }
 
             fn update(self, node: &mut Node) {
@@ -315,8 +319,8 @@ macro_rules! impl_no_diff {
         impl View for $name<String> {
             type Product = Node;
 
-            fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-                p.put(self.into_text())
+            fn build(self) -> Self::Product {
+                self.into_text()
             }
 
             fn update(self, p: &mut Self::Product) {

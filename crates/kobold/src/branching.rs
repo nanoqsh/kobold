@@ -93,14 +93,14 @@
 //! # fn main() {}
 //! ```
 
-use std::mem::MaybeUninit;
-use std::pin::Pin;
+use std::mem::replace;
 
 use wasm_bindgen::JsValue;
 use web_sys::Node;
 
 use crate::dom::Anchor;
-use crate::internal::{empty_node, In, Out};
+use crate::internal::empty_node;
+use crate::runtime::EventId;
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -120,37 +120,22 @@ macro_rules! branch {
         {
             type Product = $name<$($var::Product),*>;
 
-            fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-                let p: In<$name<$(MaybeUninit<$var::Product>),*>> = unsafe { p.cast() };
-
-                let out = match self {
+            fn build(self) -> Self::Product {
+                match self {
                     $(
-                        $name::$var(html) => {
-                            let mut p = p.put($name::$var(MaybeUninit::uninit()));
-
-                            match &mut *p {
-                                $name::$var(field) => {
-                                    In::pinned(unsafe { Pin::new_unchecked(field) }, move |p| html.build(p));
-                                }
-                                _ => unsafe { std::hint::unreachable_unchecked() }
-                            }
-
-                            p
-                        },
+                        $name::$var(view) => $name::$var(view.build()),
                     )*
-                };
-
-                unsafe { out.cast() }
+                }
             }
 
             fn update(self, p: &mut Self::Product) {
                 match (self, p) {
                     $(
-                        ($name::$var(html), $name::$var(p)) => html.update(p),
+                        ($name::$var(view), $name::$var(p)) => view.update(p),
                     )*
 
-                    (html, p) => {
-                        let old = In::replace(p, move |p| html.build(p));
+                    (view, p) => {
+                        let old = replace(p, view.build());
 
                         old.replace_with(p.js());
                     }
@@ -170,6 +155,14 @@ macro_rules! branch {
                 match self {
                     $(
                         $name::$var(p) => p.js(),
+                    )*
+                }
+            }
+
+            fn trigger(&self, e: EventId) -> bool {
+                match self {
+                    $(
+                        $name::$var(p) => p.trigger(e),
                     )*
                 }
             }
@@ -213,13 +206,17 @@ impl Anchor for EmptyNode {
     fn anchor(&self) -> &Node {
         &self.0
     }
+
+    fn trigger(&self, _: EventId) -> bool {
+        false
+    }
 }
 
 impl View for Empty {
     type Product = EmptyNode;
 
-    fn build(self, p: In<EmptyNode>) -> Out<EmptyNode> {
-        p.put(EmptyNode(empty_node()))
+    fn build(self) -> EmptyNode {
+        EmptyNode(empty_node())
     }
 
     fn update(self, _: &mut EmptyNode) {}
@@ -228,35 +225,20 @@ impl View for Empty {
 impl<T: View> View for Option<T> {
     type Product = Branch2<T::Product, EmptyNode>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        let p: In<Branch2<MaybeUninit<T::Product>, MaybeUninit<EmptyNode>>> = unsafe { p.cast() };
-
-        let out = match self {
-            Some(html) => {
-                let mut p = p.put(Branch2::A(MaybeUninit::uninit()));
-
-                match &mut *p {
-                    Branch2::A(field) => {
-                        In::pinned(unsafe { Pin::new_unchecked(field) }, move |p| html.build(p));
-                    }
-                    Branch2::B(_) => unsafe { std::hint::unreachable_unchecked() },
-                }
-
-                p
-            }
-            None => p.put(Branch2::B(MaybeUninit::new(EmptyNode(empty_node())))),
-        };
-
-        unsafe { out.cast() }
+    fn build(self) -> Self::Product {
+        match self {
+            Some(view) => Branch2::A(view.build()),
+            None => Branch2::B(EmptyNode(empty_node())),
+        }
     }
 
     fn update(self, p: &mut Self::Product) {
         match (self, p) {
-            (Some(html), Branch2::A(p)) => html.update(p),
+            (Some(view), Branch2::A(p)) => view.update(p),
             (None, Branch2::B(_)) => (),
 
-            (html, p) => {
-                let old = In::replace(p, move |p| html.build(p));
+            (view, p) => {
+                let old = replace(p, view.build());
 
                 old.replace_with(p.js());
             }

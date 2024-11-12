@@ -7,26 +7,26 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::internal::{In, Out};
+use crate::runtime::EventId;
 use crate::{Mountable, View};
 
 pub struct ListProduct<P: Mountable> {
-    list: Vec<Box<P>>,
+    list: Vec<P>,
     mounted: usize,
     fragment: FragmentBuilder,
 }
 
 impl<P: Mountable> ListProduct<P> {
-    pub fn build<I>(iter: I, p: In<Self>) -> Out<Self>
+    pub fn build<I>(iter: I) -> Self
     where
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        let mut list = p.put(ListProduct {
+        let mut list = ListProduct {
             list: Vec::new(),
             mounted: 0,
             fragment: FragmentBuilder::new(),
-        });
+        };
 
         list.extend(iter);
         list
@@ -65,7 +65,7 @@ impl<P: Mountable> ListProduct<P> {
         I::Item: View<Product = P>,
     {
         self.list.extend(iter.map(|view| {
-            let built = In::boxed(|p| view.build(p));
+            let built = view.build();
 
             self.fragment.append(built.js());
 
@@ -103,5 +103,9 @@ where
 
     fn anchor(&self) -> &Fragment {
         &self.fragment
+    }
+
+    fn trigger(&self, e: EventId) -> bool {
+        self.list.iter().any(|p| p.trigger(e))
     }
 }

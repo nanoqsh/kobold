@@ -13,8 +13,8 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::internal::{In, Out};
-use crate::{init, Mountable, View};
+use crate::runtime::EventId;
+use crate::{Mountable, View};
 
 mod hook;
 mod into_state;
@@ -74,14 +74,11 @@ where
 {
     type Product = StatefulProduct<S::State, V::Product>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        p.in_place(|p| unsafe {
-            let state = init!(p.state = Hook::new(self.state.init()));
+    fn build(self) -> Self::Product {
+        let state = Hook::new(self.state.init());
+        let product = (self.render)(&state).build();
 
-            init!(p.product @ (self.render)(&*state).build(p));
-
-            Out::from_raw(p)
-        })
+        StatefulProduct { state, product }
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -98,6 +95,10 @@ where
 
     fn js(&self) -> &JsValue {
         self.product.js()
+    }
+
+    fn trigger(&self, e: EventId) -> bool {
+        self.product.trigger(e)
     }
 
     fn unmount(&self) {
@@ -145,6 +146,10 @@ where
         self.inner.js()
     }
 
+    fn trigger(&self, e: EventId) -> bool {
+        self.inner.trigger(e)
+    }
+
     fn unmount(&self) {
         self.inner.unmount()
     }
@@ -164,16 +169,11 @@ where
 {
     type Product = OnceProduct<S::State, V::Product, D>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        p.in_place(|p| unsafe {
-            let product = init!(p.inner @ self.with_state.build(p));
+    fn build(self) -> Self::Product {
+        let inner = self.with_state.build();
+        let _no_drop = (self.handler)(Signal::new(&inner.state));
 
-            let _no_drop = (self.handler)(Signal::new(&product.state));
-
-            init!(p._no_drop = _no_drop);
-
-            Out::from_raw(p)
-        })
+        OnceProduct { inner, _no_drop }
     }
 
     fn update(self, p: &mut Self::Product) {

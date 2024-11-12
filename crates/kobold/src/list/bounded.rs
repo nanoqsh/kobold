@@ -8,8 +8,7 @@ use std::ops::{Deref, DerefMut};
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::init;
-use crate::internal::{In, Out};
+use crate::runtime::EventId;
 use crate::{Mountable, View};
 
 pub struct BoundedProduct<P: Mountable, const N: usize> {
@@ -19,18 +18,16 @@ pub struct BoundedProduct<P: Mountable, const N: usize> {
 }
 
 impl<P: Mountable, const N: usize> BoundedProduct<P, N> {
-    pub fn build<I>(iter: I, p: In<Self>) -> Out<Self>
+    pub fn build<I>(iter: I) -> Self
     where
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        let mut list = p.in_place(|p| unsafe {
-            init!(p.list @ BoundedVec::new(p));
-            init!(p.mounted = 0);
-            init!(p.fragment = FragmentBuilder::new());
-
-            Out::from_raw(p)
-        });
+        let mut list = BoundedProduct {
+            list: BoundedVec::new(),
+            mounted: 0,
+            fragment: FragmentBuilder::new(),
+        };
 
         list.extend(iter);
         list
@@ -68,13 +65,13 @@ impl<P: Mountable, const N: usize> BoundedProduct<P, N> {
         I: Iterator,
         I::Item: View<Product = P>,
     {
-        self.list.extend(iter, |view, p| {
-            let built = view.build(p);
+        self.list.extend(iter.map(|view| {
+            let built = view.build();
 
             self.fragment.append(built.js());
 
             built
-        });
+        }));
 
         self.mounted = self.list.len();
     }
@@ -108,6 +105,11 @@ where
     fn anchor(&self) -> &Fragment {
         &self.fragment
     }
+
+    fn trigger(&self, e: EventId) -> bool {
+        self.list.iter().any(|p| p.trigger(e))
+
+    }
 }
 
 pub struct BoundedVec<T, const N: usize> {
@@ -116,16 +118,12 @@ pub struct BoundedVec<T, const N: usize> {
 }
 
 impl<T, const N: usize> BoundedVec<T, N> {
-    pub fn push_in<F>(&mut self, f: F) -> bool
-    where
-        F: FnOnce(In<T>) -> Out<T>,
-    {
+    pub fn push(&mut self, item: T) -> bool {
         if self.len >= N {
             return false;
         }
 
-        let _ = f(In(&mut self.data[self.len]));
-
+        self.data[self.len].write(item);
         self.len += 1;
 
         true
@@ -133,33 +131,23 @@ impl<T, const N: usize> BoundedVec<T, N> {
 }
 
 impl<T, const N: usize> BoundedVec<T, N> {
-    fn new(mem: In<Self>) -> Out<Self> {
-        mem.in_place(|ptr| unsafe {
-            // ⚠️ Safety:
-            // ==========
-            //
-            // We don't initialize `data` here. Since `data` is
-            // an array of `MaybeUninit<T>` it is safe for it to be
-            // uninitialized.
-            init!(ptr.len = 0);
-
-            Out::from_raw(ptr)
-        })
+    const fn new() -> Self {
+        BoundedVec {
+            data: [const { MaybeUninit::<T>::uninit() }; N],
+            len: 0,
+        }
     }
 
     fn len(&self) -> usize {
         self.len
     }
 
-    fn extend<I, F>(&mut self, iter: I, mut f: F)
+    fn extend<I>(&mut self, iter: I)
     where
-        I: Iterator,
-        F: FnMut(I::Item, In<T>) -> Out<T>,
+        I: Iterator<Item = T>,
     {
-        for view in iter {
-            if !self.push_in(|p| f(view, p)) {
-                break;
-            }
+        for item in iter {
+            self.push(item);
         }
     }
 }

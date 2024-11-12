@@ -12,8 +12,9 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener};
 use crate::internal::{In, Out};
+use crate::runtime;
 use crate::state::ShouldRender;
-use crate::{runtime, View};
+use crate::View;
 
 pub struct Signal<S> {
     inner: *const UnsafeCell<S>,
@@ -149,8 +150,8 @@ where
 {
     type Product = <&'a V as View>::Product;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        (**self).build(p)
+    fn build(self) -> Self::Product {
+        (**self).build()
     }
 
     fn update(self, p: &mut Self::Product) {

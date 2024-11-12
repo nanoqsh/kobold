@@ -374,8 +374,6 @@ mod value;
 
 pub mod state;
 
-use internal::{In, Out};
-
 /// The prelude module with most commonly used types.
 ///
 /// Intended use is:
@@ -404,7 +402,7 @@ pub trait View {
     type Product: Mountable;
 
     /// Build a product that can be mounted in the DOM from this type.
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product>;
+    fn build(self) -> Self::Product;
 
     /// Update the product and apply changes to the DOM if necessary.
     fn update(self, p: &mut Self::Product);
@@ -447,8 +445,8 @@ where
 {
     type Product = V::Product;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        let prod = self.view.build(p);
+    fn build(self) -> Self::Product {
+        let prod = self.view.build();
 
         (self.handler)(prod.js().unchecked_ref());
 
@@ -472,8 +470,8 @@ where
 {
     type Product = V::Product;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        let prod = self.view.build(p);
+    fn build(self) -> Self::Product {
+        let prod = self.view.build();
 
         (self.handler)(prod.js().unchecked_ref());
 
