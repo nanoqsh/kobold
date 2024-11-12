@@ -7,21 +7,33 @@ use std::ptr::NonNull;
 
 use crate::{internal, Mountable, View};
 
-struct RuntimeData<P, F> {
+struct RuntimeData<P, F, T> {
     product: P,
     update: F,
+    trigger: T,
 }
 
 trait Runtime {
     fn update(&mut self);
+
+    fn trigger(&mut self, e: &Event);
 }
 
-impl<P, F> Runtime for RuntimeData<P, F>
+impl<P, F, T> Runtime for RuntimeData<P, F, T>
 where
     F: Fn(NonNull<P>),
+    T: Fn(NonNull<P>, &Event) -> Option<Then>,
 {
     fn update(&mut self) {
         (self.update)(NonNull::from(&mut self.product))
+    }
+
+    fn trigger(&mut self, e: &Event) {
+        let p = NonNull::from(&mut self.product);
+
+        if let Some(Then::Render) = (self.trigger)(p, e) {
+            (self.update)(p);
+        }
     }
 }
 
@@ -32,12 +44,18 @@ where
 /// * [`IntoState::update`](crate::stateful::IntoState::update)
 pub trait ShouldRender: 'static {
     fn should_render(self) -> bool;
+
+    fn then(self) -> Then;
 }
 
 /// Closures without return type always update their view.
 impl ShouldRender for () {
     fn should_render(self) -> bool {
         true
+    }
+
+    fn then(self) -> Then {
+        Then::Render
     }
 }
 
@@ -60,15 +78,19 @@ impl ShouldRender for Then {
             Then::Render => true,
         }
     }
+
+    fn then(self) -> Then {
+        self
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct StateId(u32);
+pub struct StateId(pub(crate) u32);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct EventId(u32);
+pub struct EventId(pub(crate) u32);
 
 impl StateId {
     pub(crate) fn next() -> Self {
@@ -82,10 +104,6 @@ impl StateId {
     pub(crate) fn void() -> Self {
         StateId(u32::MAX)
     }
-
-    pub(crate) fn raw(self) -> u32 {
-        self.0
-    }
 }
 
 impl EventId {
@@ -95,10 +113,6 @@ impl EventId {
         static ID: AtomicU32 = AtomicU32::new(0);
 
         EventId(ID.fetch_add(1, Ordering::Relaxed))
-    }
-
-    pub(crate) fn raw(self) -> u32 {
-        self.0
     }
 }
 
@@ -137,6 +151,11 @@ where
     let runtime = Box::new(RuntimeData {
         product: render().build(),
         update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
+        trigger: move |mut p: NonNull<_>, e: &Event| {
+            let p: &mut V::Product = unsafe { p.as_mut() };
+
+            p.trigger(e)
+        },
     });
 
     internal::append_body(runtime.product.js());
@@ -144,6 +163,19 @@ where
     let runtime = NonNull::from(Box::leak(runtime));
 
     RUNTIME.set(Some(runtime));
+}
+
+pub(crate) fn trigger(event: web_sys::Event, eid: EventId, sid: StateId) {
+    if let Some(runtime) = RUNTIME.get() {
+        let e = Event {
+            eid,
+            sid,
+            state: Cell::new(None),
+            event,
+        };
+
+        unsafe { (*runtime.as_ptr()).trigger(&e) }
+    }
 }
 
 pub(crate) fn lock_update<F, R>(f: F)
