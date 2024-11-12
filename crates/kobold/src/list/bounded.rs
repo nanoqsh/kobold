@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::EventId;
+use crate::runtime::{EventId, Then};
 use crate::{Mountable, View};
 
 pub struct BoundedProduct<P: Mountable, const N: usize> {
@@ -106,9 +106,8 @@ where
         &self.fragment
     }
 
-    fn trigger(&self, e: EventId) -> bool {
-        self.list.iter().any(|p| p.trigger(e))
-
+    fn trigger(&self, e: EventId) -> Option<Then> {
+        self.list.iter().find_map(|p| p.trigger(e))
     }
 }
 

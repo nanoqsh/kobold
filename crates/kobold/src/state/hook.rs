@@ -12,8 +12,7 @@ use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener};
 use crate::internal::{In, Out};
-use crate::runtime;
-use crate::state::ShouldRender;
+use crate::runtime::{self, ShouldRender};
 use crate::View;
 
 pub struct Signal<S> {

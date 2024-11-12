@@ -382,7 +382,8 @@ pub mod state;
 /// ```
 pub mod prelude {
     pub use crate::event::{Event, KeyboardEvent, MouseEvent};
-    pub use crate::state::{stateful, Hook, IntoState, Signal, Then};
+    pub use crate::runtime::Then;
+    pub use crate::state::{stateful, Hook, IntoState, Signal};
     pub use crate::{class, event, state};
     pub use crate::{component, view, View};
 }

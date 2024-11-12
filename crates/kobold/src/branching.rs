@@ -100,7 +100,7 @@ use web_sys::Node;
 
 use crate::dom::Anchor;
 use crate::internal::empty_node;
-use crate::runtime::EventId;
+use crate::runtime::{EventId, Then};
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -159,7 +159,7 @@ macro_rules! branch {
                 }
             }
 
-            fn trigger(&self, e: EventId) -> bool {
+            fn trigger(&self, e: EventId) -> Option<Then> {
                 match self {
                     $(
                         $name::$var(p) => p.trigger(e),
@@ -207,8 +207,8 @@ impl Anchor for EmptyNode {
         &self.0
     }
 
-    fn trigger(&self, _: EventId) -> bool {
-        false
+    fn trigger(&self, _: EventId) -> Option<Then> {
+        None
     }
 }
 

@@ -13,16 +13,14 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::EventId;
+use crate::runtime::{EventId, Then};
 use crate::{Mountable, View};
 
 mod hook;
 mod into_state;
-mod should_render;
 
 pub use hook::{Bound, Hook, Signal};
 pub use into_state::IntoState;
-pub use should_render::{ShouldRender, Then};
 
 /// Create a stateful [`View`] over some mutable state. The state
 /// needs to be created using the [`IntoState`] trait.
@@ -97,7 +95,7 @@ where
         self.product.js()
     }
 
-    fn trigger(&self, e: EventId) -> bool {
+    fn trigger(&self, e: EventId) -> Option<Then> {
         self.product.trigger(e)
     }
 
@@ -146,7 +144,7 @@ where
         self.inner.js()
     }
 
-    fn trigger(&self, e: EventId) -> bool {
+    fn trigger(&self, e: EventId) -> Option<Then> {
         self.inner.trigger(e)
     }
 

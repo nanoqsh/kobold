@@ -11,7 +11,7 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::runtime::EventId;
+use crate::runtime::{EventId, Then};
 use crate::value::{IntoText, Value};
 use crate::{Mountable, View};
 
@@ -146,7 +146,7 @@ where
         &self.inner
     }
 
-    fn trigger(&self, e: EventId) -> bool {
+    fn trigger(&self, e: EventId) -> Option<Then> {
         self.inner.trigger(e)
     }
 }

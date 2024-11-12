@@ -10,7 +10,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::Node;
 
 use crate::internal;
-use crate::runtime::EventId;
+use crate::runtime::{EventId, Then};
 
 /// A type that can be mounted in the DOM
 pub trait Mountable: 'static {
@@ -22,9 +22,7 @@ pub trait Mountable: 'static {
     fn js(&self) -> &JsValue;
 
     /// Attempt to handle current runtime event.
-    ///
-    /// Return `true` if the event has been handled.
-    fn trigger(&self, e: EventId) -> bool;
+    fn trigger(&self, e: EventId) -> Option<Then>;
 
     /// Unmount the root of this product from the DOM.
     fn unmount(&self);
@@ -42,9 +40,7 @@ pub trait Anchor {
     fn anchor(&self) -> &Self::Target;
 
     /// Attempt to handle current runtime event.
-    ///
-    /// Return `true` if the event has been handled.
-    fn trigger(&self, e: EventId) -> bool;
+    fn trigger(&self, e: EventId) -> Option<Then>;
 }
 
 impl<T> Mountable for T
@@ -58,7 +54,7 @@ where
         self.anchor().js()
     }
 
-    fn trigger(&self, e: EventId) -> bool {
+    fn trigger(&self, e: EventId) -> Option<Then> {
         Anchor::trigger(self, e)
     }
 
@@ -152,8 +148,8 @@ impl Mountable for Node {
         self
     }
 
-    fn trigger(&self, _: EventId) -> bool {
-        false
+    fn trigger(&self, _: EventId) -> Option<Then> {
+        None
     }
 
     fn unmount(&self) {
@@ -172,8 +168,8 @@ impl Mountable for Fragment {
         &self.0
     }
 
-    fn trigger(&self, _: EventId) -> bool {
-        false
+    fn trigger(&self, _: EventId) -> Option<Then> {
+        None
     }
 
     fn unmount(&self) {
