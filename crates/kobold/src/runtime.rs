@@ -5,6 +5,8 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
+use wasm_bindgen::{JsCast, JsValue};
+
 use crate::{internal, Mountable, View};
 
 struct RuntimeData<P, F, T> {
@@ -120,7 +122,7 @@ pub struct Event {
     pub(crate) eid: EventId,
     pub(crate) sid: StateId,
     pub(crate) state: Cell<Option<NonNull<()>>>,
-    pub(crate) event: web_sys::Event,
+    pub(crate) event: Cell<JsValue>,
 }
 
 pub trait Trigger {
@@ -171,7 +173,7 @@ pub(crate) fn trigger(event: web_sys::Event, eid: EventId, sid: StateId) {
             eid,
             sid,
             state: Cell::new(None),
-            event,
+            event: Cell::new(event.unchecked_into()),
         };
 
         unsafe { (*runtime.as_ptr()).trigger(&e) }
@@ -183,7 +185,7 @@ where
     F: FnOnce() -> R,
     R: ShouldRender,
 {
-    debug_assert!(RUNTIME.get().is_none(), "Cyclical update detected");
+    debug_assert!(RUNTIME.get().is_some(), "Cyclical update detected");
 
     if let Some(runtime) = RUNTIME.take() {
         if f().should_render() {

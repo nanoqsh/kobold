@@ -79,7 +79,7 @@ macro_rules! event {
 }
 
 mod sealed {
-    pub trait EventCast {}
+    pub trait EventCast: From<web_sys::Event> {}
 
     impl EventCast for web_sys::Event {}
 }

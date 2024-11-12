@@ -6,11 +6,13 @@ use std::cell::UnsafeCell;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::ptr::NonNull;
 
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::spawn_local;
 
-use crate::event::{EventCast, Listener};
-use crate::runtime::{self, ShouldRender, StateId};
+use crate::event::{EventCast, Listener, ListenerHandle};
+use crate::runtime::{self, Event, EventId, ShouldRender, StateId, Then, Trigger};
 use crate::View;
 
 pub struct Signal<S> {
@@ -103,9 +105,11 @@ impl<S> Hook<S> {
         F: Fn(&mut S, E) -> O + 'static,
         O: ShouldRender,
     {
-        let inner = &self.inner;
-
-        Bound { inner, callback }
+        Bound {
+            sid: self.id,
+            callback,
+            _marker: PhantomData,
+        }
     }
 
     pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
@@ -155,80 +159,134 @@ where
     }
 }
 
-pub struct Bound<'b, S, F> {
-    inner: &'b UnsafeCell<S>,
+#[derive(Clone, Copy)]
+pub struct Bound<S, F> {
+    sid: StateId,
     callback: F,
+    _marker: PhantomData<S>,
 }
 
-impl<S, F> Bound<'_, S, F> {
-    pub fn into_listener<E, O>(self) -> impl Listener<E>
-    where
-        S: 'static,
-        E: EventCast,
-        F: Fn(&mut S, E) -> O + 'static,
-        O: ShouldRender,
-    {
-        let Bound { inner, callback } = self;
-
-        let inner = inner as *const UnsafeCell<S>;
-        let bound = move |e| {
-            // ⚠️ Safety:
-            // ==========
-            //
-            // This is fired only as event listener from the DOM, which guarantees that
-            // state is not currently borrowed, as events cannot interrupt normal
-            // control flow, and `Signal`s cannot borrow state across .await points.
-            runtime::lock_update(|| {
-                let state = unsafe { &mut *(*inner).get() };
-
-                callback(state, e)
-            })
-        };
-
-        BoundListener {
-            bound,
-            _unbound: PhantomData::<F>,
-        }
-    }
+#[derive(Clone, Copy)]
+pub struct BoundProduct<E, S, F> {
+    eid: EventId,
+    sid: StateId,
+    callback: F,
+    _marker: PhantomData<NonNull<(E, S)>>,
 }
 
-impl<S, F> Clone for Bound<'_, S, F>
+impl<E, S, F, O> Listener<E> for Bound<S, F>
 where
-    F: Clone,
-{
-    fn clone(&self) -> Self {
-        Bound {
-            inner: self.inner,
-            callback: self.callback.clone(),
-        }
-    }
-}
-
-impl<S, F> Copy for Bound<'_, S, F> where F: Copy {}
-
-struct BoundListener<B, U> {
-    bound: B,
-    _unbound: PhantomData<U>,
-}
-
-impl<B, U, E> Listener<E> for BoundListener<B, U>
-where
-    B: Listener<E>,
+    S: 'static,
     E: EventCast,
-    Self: 'static,
+    F: Fn(&mut S, E) -> O + 'static,
+    O: ShouldRender,
 {
-    type Product = B::Product;
+    type Product = BoundProduct<E, S, F>;
 
     fn build(self) -> Self::Product {
-        self.bound.build()
+        BoundProduct {
+            eid: EventId::next(),
+            sid: self.sid,
+            callback: self.callback,
+            _marker: PhantomData,
+        }
     }
 
     fn update(self, p: &mut Self::Product) {
-        // No need to update zero-sized closures.
-        //
-        // This is a const branch that should be optimized away.
-        if size_of::<U>() != 0 {
-            self.bound.update(p);
+        p.sid = self.sid;
+        p.callback = self.callback;
+    }
+}
+
+impl<E, S, F, O> ListenerHandle for BoundProduct<E, S, F>
+where
+    S: 'static,
+    E: EventCast,
+    F: Fn(&mut S, E) -> O + 'static,
+    O: ShouldRender,
+{
+    fn js_value(&mut self) -> JsValue {
+        todo!()
+    }
+}
+
+impl<E, S, F, O> Trigger for BoundProduct<E, S, F>
+where
+    S: 'static,
+    E: EventCast,
+    F: Fn(&mut S, E) -> O + 'static,
+    O: ShouldRender,
+{
+    fn trigger(&self, e: &Event) -> Option<Then> {
+        if e.eid != self.eid {
+            return None;
+        }
+
+        let event = E::from(e.event.replace(JsValue::undefined()).unchecked_into());
+
+        unsafe {
+            let state: &Hook<S> = e.state.get()?.cast().as_ref();
+
+            Some((self.callback)(&mut *state.inner.get(), event).then())
         }
     }
 }
+
+// impl<S, F> Bound<'_, S, F> {
+//     pub fn into_listener<E, O>(self) -> impl Listener<E>
+//     where
+//         S: 'static,
+//         E: EventCast,
+//         F: Fn(&mut S, E) -> O + 'static,
+//         O: ShouldRender,
+//     {
+//         let Bound { inner, callback } = self;
+
+//         let inner = inner as *const UnsafeCell<S>;
+//         let bound = move |e| {
+//             // ⚠️ Safety:
+//             // ==========
+//             //
+//             // This is fired only as event listener from the DOM, which guarantees that
+//             // state is not currently borrowed, as events cannot interrupt normal
+//             // control flow, and `Signal`s cannot borrow state across .await points.
+//             runtime::lock_update(|| {
+//                 let state = unsafe { &mut *(*inner).get() };
+
+//                 callback(state, e)
+//             })
+//         };
+
+//         BoundListener {
+//             bound,
+//             _unbound: PhantomData::<F>,
+//         }
+//     }
+// }
+
+// struct BoundListener<B, U> {
+//     bound: B,
+//     _unbound: PhantomData<U>,
+// }
+
+// impl<B, U, E> Listener<E> for BoundListener<B, U>
+// where
+//     B: Listener<E>,
+//     E: EventCast,
+//     Self: 'static,
+// {
+//     type Product = B::Product;
+
+//     fn build(self) -> Self::Product {
+//         self.bound.build()
+//     }
+
+//     fn update(self, p: &mut Self::Product) {
+//         // No need to update zero-sized closures.
+//         //
+//         // This is a const branch that should be optimized away.
+//         if size_of::<U>() != 0 {
+//             self.bound.update(p);
+//         }
+//     }
+// }
