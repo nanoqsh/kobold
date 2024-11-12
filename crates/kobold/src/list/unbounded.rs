@@ -55,11 +55,9 @@ impl<P: Mountable> ListProduct<P> {
                     old.unmount();
                     old = match list.next() {
                         Some(p) => p,
-                        None => break,
+                        None => return,
                     };
                 }
-
-                return;
             };
 
             new.update(old);
