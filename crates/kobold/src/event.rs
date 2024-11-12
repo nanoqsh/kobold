@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
-use crate::internal::{self, In, Out};
+use crate::internal;
 
 #[wasm_bindgen]
 extern "C" {
@@ -119,7 +119,7 @@ where
 {
     type Product: ListenerHandle;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product>;
+    fn build(self) -> Self::Product;
 
     fn update(self, p: &mut Self::Product);
 }
@@ -131,11 +131,15 @@ where
 {
     type Product = ListenerProduct<Self, E>;
 
-    fn build(self, p: In<Self::Product>) -> Out<Self::Product> {
-        p.put(ListenerProduct {
+    fn build(self) -> Self::Product {
+        // TODO!
+        // =====
+        //
+        // Include StateId
+        ListenerProduct {
             closure: self,
             _event: PhantomData,
-        })
+        }
     }
 
     fn update(self, p: &mut ListenerProduct<Self, E>) {
