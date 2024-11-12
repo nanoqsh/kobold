@@ -62,8 +62,31 @@ impl ShouldRender for Then {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct StateId(u32);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct EventId(u32);
+
+impl StateId {
+    pub(crate) fn next() -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static ID: AtomicU32 = AtomicU32::new(0);
+
+        StateId(ID.fetch_add(1, Ordering::Relaxed))
+    }
+
+    pub(crate) fn void() -> Self {
+        StateId(u32::MAX)
+    }
+
+    pub(crate) fn raw(self) -> u32 {
+        self.0
+    }
+}
 
 impl EventId {
     pub(crate) fn next() -> Self {
@@ -73,10 +96,17 @@ impl EventId {
 
         EventId(ID.fetch_add(1, Ordering::Relaxed))
     }
+
+    pub(crate) fn raw(self) -> u32 {
+        self.0
+    }
 }
 
 pub struct Event {
-    eid: EventId,
+    pub(crate) eid: EventId,
+    pub(crate) sid: StateId,
+    pub(crate) state: Cell<Option<NonNull<()>>>,
+    pub(crate) event: web_sys::Event,
 }
 
 pub trait Trigger {

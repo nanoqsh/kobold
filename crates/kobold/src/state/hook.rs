@@ -6,26 +6,26 @@ use std::cell::UnsafeCell;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::rc::{Rc, Weak};
 
 use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener};
-use crate::runtime::{self, ShouldRender};
+use crate::runtime::{self, ShouldRender, StateId};
 use crate::View;
 
 pub struct Signal<S> {
     inner: *const UnsafeCell<S>,
-    drop_flag: Weak<()>,
+    _id: StateId,
 }
 
 impl<S> Signal<S> {
     pub(crate) fn new(hook: &Hook<S>) -> Self {
         let inner = &hook.inner;
-        let rc = unsafe { &mut *hook.drop_flag.get() }.get_or_insert_with(|| Rc::new(()));
-        let drop_flag = Rc::downgrade(rc);
 
-        Signal { inner, drop_flag }
+        Signal {
+            inner,
+            _id: hook.id,
+        }
     }
 
     /// Update the state behind this `Signal`.
@@ -52,11 +52,10 @@ impl<S> Signal<S> {
         F: FnOnce(&mut S) -> O,
         O: ShouldRender,
     {
-        if self.drop_flag.strong_count() == 1 {
-            let state = unsafe { &mut *(*self.inner).get() };
+        // TODO: handle StateId
+        let state = unsafe { &mut *(*self.inner).get() };
 
-            runtime::lock_update(move || mutator(state))
-        }
+        runtime::lock_update(move || mutator(state))
     }
 
     /// Same as [`update`](Signal::update), but it never renders updates.
@@ -64,9 +63,8 @@ impl<S> Signal<S> {
     where
         F: FnOnce(&mut S),
     {
-        if self.drop_flag.strong_count() == 1 {
-            mutator(unsafe { &mut *(*self.inner).get() });
-        }
+        // TODO: handle StateId
+        mutator(unsafe { &mut *(*self.inner).get() });
     }
 
     /// Replace the entire state with a new value and trigger an update.
@@ -77,7 +75,7 @@ impl<S> Signal<S> {
 
 pub struct Hook<S> {
     inner: UnsafeCell<S>,
-    drop_flag: UnsafeCell<Option<Rc<()>>>,
+    pub(super) id: StateId,
 }
 
 impl<S> Deref for Hook<S> {
@@ -89,10 +87,10 @@ impl<S> Deref for Hook<S> {
 }
 
 impl<S> Hook<S> {
-    pub(crate) const fn new(inner: S) -> Self {
+    pub(crate) fn new(inner: S) -> Self {
         Hook {
             inner: UnsafeCell::new(inner),
-            drop_flag: UnsafeCell::new(None),
+            id: StateId::next(),
         }
     }
 

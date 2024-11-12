@@ -11,6 +11,8 @@
 //! could ever do is render itself once. To get around this the [`stateful`] function can
 //! be used to create views that have ownership over some arbitrary mutable state.
 //!
+use std::ptr::NonNull;
+
 use wasm_bindgen::JsValue;
 
 use crate::runtime::{Event, Then, Trigger};
@@ -109,6 +111,12 @@ where
     P: Trigger,
 {
     fn trigger(&self, e: &Event) -> Option<Then> {
+        if e.sid == self.state.id {
+            debug_assert!(e.state.get().is_none());
+
+            e.state.set(Some(NonNull::from(&self.state).cast()))
+        }
+
         self.product.trigger(e)
     }
 }
