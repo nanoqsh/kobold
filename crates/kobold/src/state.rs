@@ -13,7 +13,7 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{Context, Trigger};
+use crate::runtime::{Context, Then, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -108,10 +108,10 @@ impl<S, P> Trigger for StatefulProduct<S, P>
 where
     P: Trigger,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) {
-        self.product.trigger(ctx);
-
-        ctx.provide_state(self.state.id, unsafe { &mut *self.state.as_ptr() });
+    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+        ctx.with_state(self.state.id, self.state.as_ptr(), |ctx| {
+            self.product.trigger(ctx)
+        })
     }
 }
 
@@ -164,8 +164,8 @@ impl<S, P, D> Trigger for OnceProduct<S, P, D>
 where
     StatefulProduct<S, P>: Trigger,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) {
-        self.inner.trigger(ctx);
+    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+        self.inner.trigger(ctx)
     }
 }
 

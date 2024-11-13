@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 
 use web_sys::Event;
 
-use crate::{internal, Mountable, View};
+use crate::{event::EventCast, internal, Mountable, View};
 
 struct RuntimeData<P, F, T> {
     product: P,
@@ -22,7 +22,7 @@ trait Runtime {
 impl<P, F, T> Runtime for RuntimeData<P, F, T>
 where
     F: Fn(NonNull<P>),
-    T: Fn(NonNull<P>, &mut Context),
+    T: Fn(NonNull<P>, &mut Context) -> Option<Then>,
 {
     fn update(&mut self, ctx: Option<&mut Context>) {
         let p = NonNull::from(&mut self.product);
@@ -30,9 +30,9 @@ where
         if let Some(ctx) = ctx {
             (self.trigger)(p, ctx);
 
-            let ContextStep::Result(Then::Render) = ctx.step else {
+            if let Some(Then::Stop) = (self.trigger)(p, ctx) {
                 return;
-            };
+            }
         }
 
         (self.update)(p);
@@ -73,19 +73,6 @@ pub enum Then {
     Render,
 }
 
-#[repr(transparent)]
-pub struct Step(Then);
-
-impl Step {
-    pub(crate) fn then(t: Then) -> Self {
-        Step(t)
-    }
-
-    pub(crate) fn require_state() -> Self {
-        Step(Then::Stop)
-    }
-}
-
 impl ShouldRender for Then {
     fn should_render(self) -> bool {
         match self {
@@ -115,10 +102,6 @@ impl StateId {
 
         StateId(ID.fetch_add(1, Ordering::Relaxed))
     }
-
-    pub(crate) fn void() -> Self {
-        StateId(u32::MAX)
-    }
 }
 
 impl EventId {
@@ -131,58 +114,81 @@ impl EventId {
     }
 }
 
-pub struct Context<'a> {
-    event: Option<Event>,
-    step: ContextStep<'a>,
+pub struct Context {
+    eid: EventId,
+    event: Event,
+    state: Option<NonNull<StateFrame>>,
 }
 
-pub(crate) enum ContextStep<'a> {
-    Init {
-        eid: EventId,
-    },
-    StateProvision {
-        sid: StateId,
-        callback: &'a dyn Callback,
-    },
-    Result(Then),
+struct StateFrame {
+    sid: StateId,
+    ptr: *mut (),
+    next: Option<NonNull<Self>>,
 }
 
-impl<'a> Context<'a> {
-    pub const fn new(eid: EventId, event: Event) -> Self {
+impl Context {
+    const fn new(eid: EventId, event: Event) -> Self {
         Context {
-            event: Some(event),
-            step: ContextStep::Init { eid },
+            eid,
+            event,
+            state: None,
         }
     }
 
-    pub(crate) fn provide_state<S>(&mut self, id: StateId, state: &mut S) {
-        match self.step {
-            ContextStep::StateProvision { callback, sid } if sid == id => {
-                let then = unsafe {
-                    let event = self.event.take().unwrap_unchecked();
-                    callback.handle(state as *mut _ as _, event)
-                };
+    pub(crate) fn eid(&self) -> EventId {
+        self.eid
+    }
 
-                self.step = ContextStep::Result(then)
+    pub(crate) fn event<E>(&self) -> &E
+    where
+        E: EventCast,
+    {
+        unsafe { &*(&self.event as *const _ as *const E) }
+    }
+
+    pub(crate) fn with_state<F, S>(&mut self, sid: StateId, ptr: *mut S, then: F) -> Option<Then>
+    where
+        F: FnOnce(&mut Self) -> Option<Then>,
+    {
+        // We assign current state stack frame to the next pointer
+        let state = StateFrame {
+            sid,
+            ptr: ptr as *mut _,
+            next: self.state,
+        };
+
+        // Then we replace it with a temporary reference to the new frame
+        self.state = Some(NonNull::from(&state));
+
+        let ret = then(self);
+
+        // Finally we restore the old frame, discarding the temporary new one
+        self.state = state.next;
+
+        ret
+    }
+
+    pub(crate) fn get_state_ptr(&mut self, sid: StateId) -> Option<*mut ()> {
+        let mut probe = self.state;
+
+        while let Some(state) = probe {
+            let state = unsafe { state.as_ref() };
+
+            if state.sid == sid {
+                return Some(state.ptr);
             }
-            _ => (),
-        }
-    }
 
-    pub fn finished(&self) -> bool {
-        match self.step {
-            ContextStep::Result(_) => true,
-            _ => false,
+            probe = state.next;
         }
+
+        None
     }
 }
 
 pub trait Trigger {
-    fn trigger<'prod>(&'prod self, _: &mut Context<'prod>) {}
-}
-
-pub trait Callback {
-    unsafe fn handle(&self, state: *mut (), event: Event) -> Then;
+    fn trigger(&self, _: &mut Context) -> Option<Then> {
+        None
+    }
 }
 
 thread_local! {

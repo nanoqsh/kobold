@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
-use crate::runtime::{Context, EventId, Trigger};
+use crate::runtime::{Context, EventId, Then, Trigger};
 
 #[wasm_bindgen]
 extern "C" {
@@ -127,7 +127,7 @@ where
 
 impl<E, F> Listener<E> for F
 where
-    F: Fn(E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
     type Product = ListenerProduct<Self, E>;
@@ -157,7 +157,7 @@ pub trait ListenerHandle: Trigger {
 
 impl<F, E> ListenerHandle for ListenerProduct<F, E>
 where
-    F: Fn(E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
     fn js_value(&mut self) -> JsValue {
@@ -167,14 +167,16 @@ where
 
 impl<F, E> Trigger for ListenerProduct<F, E>
 where
-    F: Fn(E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
-    fn trigger(&self, ctx: &mut Context) {
-        if ctx.eid == self.eid {
-            if let Some(event) = ctx.event.take() {
-                (self.closure)(E::from(event));
-            }
+    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+        if ctx.eid() == self.eid {
+            (self.closure)(ctx.event());
+
+            Some(Then::Stop)
+        } else {
+            None
         }
     }
 }

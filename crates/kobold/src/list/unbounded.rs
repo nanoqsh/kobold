@@ -7,7 +7,7 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{Context, Step, Trigger};
+use crate::runtime::{Context, Then, Trigger};
 use crate::{Mountable, View};
 
 pub struct ListProduct<P: Mountable> {
@@ -110,7 +110,7 @@ impl<P> Trigger for ListProduct<P>
 where
     P: Mountable,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
+    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
         self.list.iter().find_map(|p| p.trigger(ctx))
     }
 }

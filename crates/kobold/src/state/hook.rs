@@ -12,7 +12,7 @@ use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Step, Then, Trigger};
+use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Then, Trigger};
 use crate::{internal, View};
 
 pub struct Signal<S> {
@@ -212,13 +212,6 @@ where
     fn js_value(&mut self) -> JsValue {
         internal::make_event_handler(self.eid.0)
     }
-
-    unsafe fn handle(&self, state: *mut (), event: &web_sys::Event) -> Then {
-        let state = &mut *(state as *mut S);
-        let event = &*(event as *const _ as *const E);
-
-        (self.callback)(state, event).then()
-    }
 }
 
 impl<E, S, F, O> Trigger for BoundProduct<E, S, F>
@@ -228,16 +221,18 @@ where
     F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
-        if ctx.eid != self.eid {
+    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+        if ctx.eid() != self.eid {
             return None;
         }
 
-        debug_assert!(ctx.sid == StateId::void());
+        match ctx.get_state_ptr(self.sid) {
+            Some(ptr) => {
+                let state = unsafe { &mut *(ptr as *mut S) };
 
-        ctx.sid = self.sid;
-        ctx.callback = Some(self);
-
-        Some(Step::require_state())
+                Some((self.callback)(state, ctx.event()).then())
+            }
+            None => None,
+        }
     }
 }
