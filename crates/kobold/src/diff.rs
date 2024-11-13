@@ -11,7 +11,7 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::runtime::{Context, Then, Trigger};
+use crate::runtime::{Context, Step, Trigger};
 use crate::value::{IntoText, Value};
 use crate::{Mountable, View};
 
@@ -151,8 +151,8 @@ impl<D, P> Trigger for Fence<D, P>
 where
     P: Trigger,
 {
-    fn trigger(&self, e: &mut Context) -> Option<Then> {
-        self.inner.trigger(e)
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
+        self.inner.trigger(ctx)
     }
 }
 

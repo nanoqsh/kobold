@@ -41,4 +41,4 @@ export function removeClass(n,v) { n.classList.remove(v); }
 export function replaceClass(n,o,v) { n.classList.replace(o,v); }
 export function toggleClass(n,c,v) { n.classList.toggle(c,v); }
 
-export function makeEventHandler(c,f) { return (e) => wasmBindings.koboldCallback(e,c,f); }
+export function makeEventHandler(eid) { return (e) => wasmBindings.koboldTrigger(e,eid); }

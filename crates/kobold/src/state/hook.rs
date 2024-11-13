@@ -3,17 +3,17 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use std::cell::UnsafeCell;
-use std::future::Future;
+// use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
 
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen::JsValue;
+// use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Then, Trigger};
-use crate::View;
+use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Step, Then, Trigger};
+use crate::{internal, View};
 
 pub struct Signal<S> {
     inner: *const UnsafeCell<S>,
@@ -96,13 +96,17 @@ impl<S> Hook<S> {
         }
     }
 
+    pub(crate) fn as_ptr(&self) -> *mut S {
+        self.inner.get()
+    }
+
     /// Binds a closure to a mutable reference of the state. While this method is public
     /// it's recommended to use the [`bind!`](crate::bind) macro instead.
     pub fn bind<E, F, O>(&self, callback: F) -> Bound<S, F>
     where
         S: 'static,
         E: EventCast,
-        F: Fn(&mut S, E) -> O + 'static,
+        F: Fn(&mut S, &E) -> O + 'static,
         O: ShouldRender,
     {
         Bound {
@@ -112,27 +116,27 @@ impl<S> Hook<S> {
         }
     }
 
-    pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
-    where
-        S: 'static,
-        E: EventCast,
-        F: Fn(Signal<S>, E) -> T + 'static,
-        T: Future<Output = ()> + 'static,
-    {
-        let this = self as *const _;
+    // pub fn bind_async<E, F, T>(&self, callback: F) -> impl Listener<E>
+    // where
+    //     S: 'static,
+    //     E: EventCast,
+    //     F: Fn(Signal<S>, E) -> T + 'static,
+    //     T: Future<Output = ()> + 'static,
+    // {
+    //     let this = self as *const _;
 
-        move |e| {
-            // ⚠️ Safety:
-            // ==========
-            //
-            // This is fired only as event listener from the DOM, which guarantees that
-            // state is not currently borrowed, as events cannot interrupt normal
-            // control flow, and `Signal`s cannot borrow state across .await points.
-            let signal = Signal::new(unsafe { &*this });
+    //     move |e| {
+    //         // ⚠️ Safety:
+    //         // ==========
+    //         //
+    //         // This is fired only as event listener from the DOM, which guarantees that
+    //         // state is not currently borrowed, as events cannot interrupt normal
+    //         // control flow, and `Signal`s cannot borrow state across .await points.
+    //         let signal = Signal::new(unsafe { &*this });
 
-            spawn_local(callback(signal, e));
-        }
-    }
+    //         spawn_local(callback(signal, e));
+    //     }
+    // }
 
     /// Get the value of state if state implements `Copy`. This is equivalent to writing
     /// `**hook` but conveys intent better.
@@ -178,7 +182,7 @@ impl<E, S, F, O> Listener<E> for Bound<S, F>
 where
     S: 'static,
     E: EventCast,
-    F: Fn(&mut S, E) -> O + 'static,
+    F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
     type Product = BoundProduct<E, S, F>;
@@ -202,11 +206,18 @@ impl<E, S, F, O> ListenerHandle for BoundProduct<E, S, F>
 where
     S: 'static,
     E: EventCast,
-    F: Fn(&mut S, E) -> O + 'static,
+    F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
     fn js_value(&mut self) -> JsValue {
-        todo!()
+        internal::make_event_handler(self.eid.0)
+    }
+
+    unsafe fn handle(&self, state: *mut (), event: &web_sys::Event) -> Then {
+        let state = &mut *(state as *mut S);
+        let event = &*(event as *const _ as *const E);
+
+        (self.callback)(state, event).then()
     }
 }
 
@@ -214,21 +225,20 @@ impl<E, S, F, O> Trigger for BoundProduct<E, S, F>
 where
     S: 'static,
     E: EventCast,
-    F: Fn(&mut S, E) -> O + 'static,
+    F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger(&self, e: &mut Context) -> Option<Then> {
-        if e.eid != self.eid {
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
+        if ctx.eid != self.eid {
             return None;
         }
 
-        let event = E::from(e.event.replace(JsValue::undefined()).unchecked_into());
+        debug_assert!(ctx.sid == StateId::void());
 
-        unsafe {
-            let state: &Hook<S> = e.state.get()?.cast().as_ref();
+        ctx.sid = self.sid;
+        ctx.callback = Some(self);
 
-            Some((self.callback)(&mut *state.inner.get(), event).then())
-        }
+        Some(Step::require_state())
     }
 }
 

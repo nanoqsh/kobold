@@ -85,13 +85,13 @@ pub(crate) fn obj(node: &Node) -> &UnsafeNode {
 }
 
 mod hidden {
+    use crate::runtime::{trigger, EventId};
+
     use super::wasm_bindgen;
 
-    #[wasm_bindgen(js_name = "koboldCallback")]
-    pub fn kobold_callback(event: web_sys::Event, closure: *mut (), vcall: usize) {
-        let vcall: fn(web_sys::Event, *mut ()) = unsafe { std::mem::transmute(vcall) };
-
-        vcall(event, closure);
+    #[wasm_bindgen(js_name = "koboldTrigger")]
+    pub fn kobold_trigger(event: web_sys::Event, eid: u32) {
+        trigger(event, EventId(eid));
     }
 }
 
@@ -136,5 +136,5 @@ extern "C" {
     // ----------------
 
     #[wasm_bindgen(js_name = "makeEventHandler")]
-    pub(crate) fn make_event_handler(closure: *mut (), vcall: usize) -> JsValue;
+    pub(crate) fn make_event_handler(eid: u32) -> JsValue;
 }

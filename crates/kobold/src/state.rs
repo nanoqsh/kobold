@@ -11,11 +11,9 @@
 //! could ever do is render itself once. To get around this the [`stateful`] function can
 //! be used to create views that have ownership over some arbitrary mutable state.
 //!
-use std::ptr::NonNull;
-
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{Context, Then, Trigger};
+use crate::runtime::{Context, Step, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -110,14 +108,25 @@ impl<S, P> Trigger for StatefulProduct<S, P>
 where
     P: Trigger,
 {
-    fn trigger(&self, e: &mut Context) -> Option<Then> {
-        if e.sid == self.state.id {
-            debug_assert!(e.state.get().is_none());
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
+        let Some(step) = self.product.trigger(ctx) else {
+            return None;
+        };
 
-            e.state.set(Some(NonNull::from(&self.state).cast()))
+        if self.state.id != ctx.sid {
+            return Some(step);
         }
 
-        self.product.trigger(e)
+        // This could be `unwrap_unchecked` here, need to make sure the guarantee is
+        // always being upheld though.
+        let Some(callback) = ctx.callback.take() else {
+            return Some(step);
+        };
+
+        // If we get a callback with our `StateId`, call it!
+        let ret = unsafe { callback.handle(self.state.as_ptr() as *mut (), &ctx.event) };
+
+        Some(Step::then(ret))
     }
 }
 
@@ -170,8 +179,8 @@ impl<S, P, D> Trigger for OnceProduct<S, P, D>
 where
     StatefulProduct<S, P>: Trigger,
 {
-    fn trigger(&self, e: &mut Context) -> Option<Then> {
-        self.inner.trigger(e)
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
+        self.inner.trigger(ctx)
     }
 }
 

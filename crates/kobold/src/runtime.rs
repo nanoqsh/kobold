@@ -5,8 +5,9 @@
 use std::cell::Cell;
 use std::ptr::NonNull;
 
-use wasm_bindgen::{JsCast, JsValue};
+use web_sys::Event;
 
+use crate::event::ListenerHandle;
 use crate::{internal, Mountable, View};
 
 struct RuntimeData<P, F, T> {
@@ -16,26 +17,24 @@ struct RuntimeData<P, F, T> {
 }
 
 trait Runtime {
-    fn update(&mut self);
-
-    fn trigger(&mut self, e: &mut Context);
+    fn update(&mut self, ctx: Option<&mut Context>);
 }
 
 impl<P, F, T> Runtime for RuntimeData<P, F, T>
 where
     F: Fn(NonNull<P>),
-    T: Fn(NonNull<P>, &mut Context) -> Option<Then>,
+    T: Fn(NonNull<P>, &mut Context) -> Option<Step>,
 {
-    fn update(&mut self) {
-        (self.update)(NonNull::from(&mut self.product))
-    }
-
-    fn trigger(&mut self, e: &mut Context) {
+    fn update(&mut self, ctx: Option<&mut Context>) {
         let p = NonNull::from(&mut self.product);
 
-        if let Some(Then::Render) = (self.trigger)(p, e) {
-            (self.update)(p);
+        if let Some(ctx) = ctx {
+            if let Some(Step(Then::Stop)) = (self.trigger)(p, ctx) {
+                return;
+            }
         }
+
+        (self.update)(p);
     }
 }
 
@@ -71,6 +70,19 @@ pub enum Then {
     Stop,
     /// Render the view after this update
     Render,
+}
+
+#[repr(transparent)]
+pub struct Step(Then);
+
+impl Step {
+    pub(crate) fn then(t: Then) -> Self {
+        Step(t)
+    }
+
+    pub(crate) fn require_state() -> Self {
+        Step(Then::Stop)
+    }
 }
 
 impl ShouldRender for Then {
@@ -118,15 +130,15 @@ impl EventId {
     }
 }
 
-pub struct Context {
+pub struct Context<'a> {
     pub(crate) eid: EventId,
     pub(crate) sid: StateId,
-    pub(crate) state: Cell<Option<NonNull<()>>>,
-    pub(crate) event: Cell<JsValue>,
+    pub(crate) event: Event,
+    pub(crate) callback: Option<&'a dyn ListenerHandle>,
 }
 
 pub trait Trigger {
-    fn trigger(&self, _: &mut Context) -> Option<Then> {
+    fn trigger<'prod>(&'prod self, _: &mut Context<'prod>) -> Option<Step> {
         None
     }
 }
@@ -153,10 +165,10 @@ where
     let runtime = Box::new(RuntimeData {
         product: render().build(),
         update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
-        trigger: move |mut p: NonNull<_>, e: &mut Context| {
+        trigger: move |mut p: NonNull<_>, ctx: &mut Context| {
             let p: &mut V::Product = unsafe { p.as_mut() };
 
-            p.trigger(e)
+            p.trigger(ctx)
         },
     });
 
@@ -167,16 +179,16 @@ where
     RUNTIME.set(Some(runtime));
 }
 
-pub(crate) fn trigger(event: web_sys::Event, eid: EventId, sid: StateId) {
+pub(crate) fn trigger(event: Event, eid: EventId) {
     if let Some(runtime) = RUNTIME.get() {
-        let mut e = Context {
+        let mut ctx = Context {
             eid,
-            sid,
-            state: Cell::new(None),
-            event: Cell::new(event.unchecked_into()),
+            sid: StateId::void(),
+            callback: None,
+            event,
         };
 
-        unsafe { (*runtime.as_ptr()).trigger(&mut e) }
+        unsafe { (*runtime.as_ptr()).update(Some(&mut ctx)) }
     }
 }
 
@@ -190,7 +202,7 @@ where
     if let Some(runtime) = RUNTIME.take() {
         if f().should_render() {
             unsafe {
-                (*runtime.as_ptr()).update();
+                (*runtime.as_ptr()).update(None);
             }
         }
 
