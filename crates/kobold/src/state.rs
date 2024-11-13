@@ -13,7 +13,7 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{Context, Step, Trigger};
+use crate::runtime::{Context, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -108,25 +108,10 @@ impl<S, P> Trigger for StatefulProduct<S, P>
 where
     P: Trigger,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
-        let Some(step) = self.product.trigger(ctx) else {
-            return None;
-        };
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) {
+        self.product.trigger(ctx);
 
-        if self.state.id != ctx.sid {
-            return Some(step);
-        }
-
-        // This could be `unwrap_unchecked` here, need to make sure the guarantee is
-        // always being upheld though.
-        let Some(callback) = ctx.callback.take() else {
-            return Some(step);
-        };
-
-        // If we get a callback with our `StateId`, call it!
-        let ret = unsafe { callback.handle(self.state.as_ptr() as *mut (), &ctx.event) };
-
-        Some(Step::then(ret))
+        ctx.provide_state(self.state.id, unsafe { &mut *self.state.as_ptr() });
     }
 }
 
@@ -179,8 +164,8 @@ impl<S, P, D> Trigger for OnceProduct<S, P, D>
 where
     StatefulProduct<S, P>: Trigger,
 {
-    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) -> Option<Step> {
-        self.inner.trigger(ctx)
+    fn trigger<'prod>(&'prod self, ctx: &mut Context<'prod>) {
+        self.inner.trigger(ctx);
     }
 }
 
