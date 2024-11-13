@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
-use crate::runtime::{self, Then, Trigger};
+use crate::runtime::{Context, Then, Trigger};
 
 #[wasm_bindgen]
 extern "C" {
@@ -170,7 +170,7 @@ where
 }
 
 impl<F, E> Trigger for ListenerProduct<F, E> {
-    fn trigger(&self, _: &runtime::Event) -> Option<Then> {
+    fn trigger(&self, _: &mut Context) -> Option<Then> {
         todo!()
     }
 }

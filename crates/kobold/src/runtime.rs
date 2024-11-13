@@ -18,19 +18,19 @@ struct RuntimeData<P, F, T> {
 trait Runtime {
     fn update(&mut self);
 
-    fn trigger(&mut self, e: &Event);
+    fn trigger(&mut self, e: &mut Context);
 }
 
 impl<P, F, T> Runtime for RuntimeData<P, F, T>
 where
     F: Fn(NonNull<P>),
-    T: Fn(NonNull<P>, &Event) -> Option<Then>,
+    T: Fn(NonNull<P>, &mut Context) -> Option<Then>,
 {
     fn update(&mut self) {
         (self.update)(NonNull::from(&mut self.product))
     }
 
-    fn trigger(&mut self, e: &Event) {
+    fn trigger(&mut self, e: &mut Context) {
         let p = NonNull::from(&mut self.product);
 
         if let Some(Then::Render) = (self.trigger)(p, e) {
@@ -118,7 +118,7 @@ impl EventId {
     }
 }
 
-pub struct Event {
+pub struct Context {
     pub(crate) eid: EventId,
     pub(crate) sid: StateId,
     pub(crate) state: Cell<Option<NonNull<()>>>,
@@ -126,7 +126,7 @@ pub struct Event {
 }
 
 pub trait Trigger {
-    fn trigger(&self, _: &Event) -> Option<Then> {
+    fn trigger(&self, _: &mut Context) -> Option<Then> {
         None
     }
 }
@@ -153,7 +153,7 @@ where
     let runtime = Box::new(RuntimeData {
         product: render().build(),
         update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
-        trigger: move |mut p: NonNull<_>, e: &Event| {
+        trigger: move |mut p: NonNull<_>, e: &mut Context| {
             let p: &mut V::Product = unsafe { p.as_mut() };
 
             p.trigger(e)
@@ -169,14 +169,14 @@ where
 
 pub(crate) fn trigger(event: web_sys::Event, eid: EventId, sid: StateId) {
     if let Some(runtime) = RUNTIME.get() {
-        let e = Event {
+        let mut e = Context {
             eid,
             sid,
             state: Cell::new(None),
             event: Cell::new(event.unchecked_into()),
         };
 
-        unsafe { (*runtime.as_ptr()).trigger(&e) }
+        unsafe { (*runtime.as_ptr()).trigger(&mut e) }
     }
 }
 

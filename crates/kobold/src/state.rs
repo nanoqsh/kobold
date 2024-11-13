@@ -15,7 +15,7 @@ use std::ptr::NonNull;
 
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{Event, Then, Trigger};
+use crate::runtime::{Context, Then, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -110,7 +110,7 @@ impl<S, P> Trigger for StatefulProduct<S, P>
 where
     P: Trigger,
 {
-    fn trigger(&self, e: &Event) -> Option<Then> {
+    fn trigger(&self, e: &mut Context) -> Option<Then> {
         if e.sid == self.state.id {
             debug_assert!(e.state.get().is_none());
 
@@ -170,7 +170,7 @@ impl<S, P, D> Trigger for OnceProduct<S, P, D>
 where
     StatefulProduct<S, P>: Trigger,
 {
-    fn trigger(&self, e: &Event) -> Option<Then> {
+    fn trigger(&self, e: &mut Context) -> Option<Then> {
         self.inner.trigger(e)
     }
 }

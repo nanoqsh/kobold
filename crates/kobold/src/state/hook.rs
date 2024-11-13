@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{self, Event, EventId, ShouldRender, StateId, Then, Trigger};
+use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Then, Trigger};
 use crate::View;
 
 pub struct Signal<S> {
@@ -217,7 +217,7 @@ where
     F: Fn(&mut S, E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger(&self, e: &Event) -> Option<Then> {
+    fn trigger(&self, e: &mut Context) -> Option<Then> {
         if e.eid != self.eid {
             return None;
         }
