@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
-use crate::runtime::{Context, EventId, Step, Then, Trigger};
+use crate::runtime::{Context, EventId, Trigger};
 
 #[wasm_bindgen]
 extern "C" {
@@ -44,11 +44,7 @@ macro_rules! event {
                 }
             }
 
-            impl<T> EventCast for $event<T> {
-                fn cast(e: &web_sys::Event) -> &Self {
-                    unsafe { &*(e as *const _ as *const Self) }
-                }
-            }
+            impl<T> EventCast for $event<T> {}
 
             impl<T> Deref for $event<T> {
                 type Target = web_sys::$event;
@@ -83,15 +79,9 @@ macro_rules! event {
 }
 
 mod sealed {
-    pub trait EventCast {
-        fn cast(e: &web_sys::Event) -> &Self;
-    }
+    pub trait EventCast: From<web_sys::Event> {}
 
-    impl EventCast for web_sys::Event {
-        fn cast(e: &web_sys::Event) -> &Self {
-            e
-        }
-    }
+    impl EventCast for web_sys::Event {}
 }
 
 pub(crate) use sealed::EventCast;
@@ -137,7 +127,7 @@ where
 
 impl<E, F> Listener<E> for F
 where
-    F: Fn(&E) + 'static,
+    F: Fn(E) + 'static,
     E: EventCast,
 {
     type Product = ListenerProduct<Self, E>;
@@ -163,36 +153,28 @@ pub struct ListenerProduct<F, E> {
 
 pub trait ListenerHandle: Trigger {
     fn js_value(&mut self) -> JsValue;
-
-    unsafe fn handle(&self, state: *mut (), event: &web_sys::Event) -> Then;
 }
 
 impl<F, E> ListenerHandle for ListenerProduct<F, E>
 where
-    F: Fn(&E) + 'static,
+    F: Fn(E) + 'static,
     E: EventCast,
 {
     fn js_value(&mut self) -> JsValue {
         internal::make_event_handler(self.eid.0)
     }
-
-    unsafe fn handle(&self, _: *mut (), _: &web_sys::Event) -> Then {
-        Then::Stop
-    }
 }
 
 impl<F, E> Trigger for ListenerProduct<F, E>
 where
-    F: Fn(&E) + 'static,
+    F: Fn(E) + 'static,
     E: EventCast,
 {
-    fn trigger(&self, ctx: &mut Context) -> Option<Step> {
+    fn trigger(&self, ctx: &mut Context) {
         if ctx.eid == self.eid {
-            (self.closure)(E::cast(&ctx.event));
-
-            Some(Step::then(Then::Stop))
-        } else {
-            None
+            if let Some(event) = ctx.event.take() {
+                (self.closure)(E::from(event));
+            }
         }
     }
 }

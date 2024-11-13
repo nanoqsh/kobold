@@ -7,7 +7,6 @@ use std::ptr::NonNull;
 
 use web_sys::Event;
 
-use crate::event::ListenerHandle;
 use crate::{internal, Mountable, View};
 
 struct RuntimeData<P, F, T> {
@@ -23,15 +22,17 @@ trait Runtime {
 impl<P, F, T> Runtime for RuntimeData<P, F, T>
 where
     F: Fn(NonNull<P>),
-    T: Fn(NonNull<P>, &mut Context) -> Option<Step>,
+    T: Fn(NonNull<P>, &mut Context),
 {
     fn update(&mut self, ctx: Option<&mut Context>) {
         let p = NonNull::from(&mut self.product);
 
         if let Some(ctx) = ctx {
-            if let Some(Step(Then::Stop)) = (self.trigger)(p, ctx) {
+            (self.trigger)(p, ctx);
+
+            let ContextStep::Result(Then::Render) = ctx.step else {
                 return;
-            }
+            };
         }
 
         (self.update)(p);
@@ -131,16 +132,57 @@ impl EventId {
 }
 
 pub struct Context<'a> {
-    pub(crate) eid: EventId,
-    pub(crate) sid: StateId,
-    pub(crate) event: Event,
-    pub(crate) callback: Option<&'a dyn ListenerHandle>,
+    event: Option<Event>,
+    step: ContextStep<'a>,
+}
+
+pub(crate) enum ContextStep<'a> {
+    Init {
+        eid: EventId,
+    },
+    StateProvision {
+        sid: StateId,
+        callback: &'a dyn Callback,
+    },
+    Result(Then),
+}
+
+impl<'a> Context<'a> {
+    pub const fn new(eid: EventId, event: Event) -> Self {
+        Context {
+            event: Some(event),
+            step: ContextStep::Init { eid },
+        }
+    }
+
+    pub(crate) fn provide_state<S>(&mut self, id: StateId, state: &mut S) {
+        match self.step {
+            ContextStep::StateProvision { callback, sid } if sid == id => {
+                let then = unsafe {
+                    let event = self.event.take().unwrap_unchecked();
+                    callback.handle(state as *mut _ as _, event)
+                };
+
+                self.step = ContextStep::Result(then)
+            }
+            _ => (),
+        }
+    }
+
+    pub fn finished(&self) -> bool {
+        match self.step {
+            ContextStep::Result(_) => true,
+            _ => false,
+        }
+    }
 }
 
 pub trait Trigger {
-    fn trigger<'prod>(&'prod self, _: &mut Context<'prod>) -> Option<Step> {
-        None
-    }
+    fn trigger<'prod>(&'prod self, _: &mut Context<'prod>) {}
+}
+
+pub trait Callback {
+    unsafe fn handle(&self, state: *mut (), event: Event) -> Then;
 }
 
 thread_local! {
@@ -181,12 +223,7 @@ where
 
 pub(crate) fn trigger(event: Event, eid: EventId) {
     if let Some(runtime) = RUNTIME.get() {
-        let mut ctx = Context {
-            eid,
-            sid: StateId::void(),
-            callback: None,
-            event,
-        };
+        let mut ctx = Context::new(eid, event);
 
         unsafe { (*runtime.as_ptr()).update(Some(&mut ctx)) }
     }
