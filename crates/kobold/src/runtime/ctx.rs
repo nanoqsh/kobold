@@ -74,6 +74,12 @@ where
         // Ideally the first condition will be evaluated at compile time
         // and this whole branch is gone if `T` isn't the same type as `S`.
         if TypeId::of::<T>() == TypeId::of::<S>() && self.0.is(sid) {
+            // ⚠️ Safety:
+            // ==========
+            //
+            // Both the `TypeId` check and the invariant nature of `StateId` always
+            // pointing to the same type of a state give us a guarantee that we can
+            // cast `&mut Hook<T>` into `&mut Hook<S>` as they are the same type.
             let cast_hook = unsafe { &mut *(self.0 as *mut Hook<T> as *mut Hook<S>) };
 
             return Some(then(cast_hook));

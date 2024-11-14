@@ -119,6 +119,7 @@ impl Tokenize for Transient {
 
         let mut generics = String::new();
 
+        let mut prebuild = String::new();
         let mut build = String::new();
         let mut update = String::new();
         let mut declare = String::new();
@@ -133,7 +134,7 @@ impl Tokenize for Transient {
 
             let _ = write!(generics, "{typ},");
 
-            field.build(&mut build, &mut build2);
+            field.build(&mut prebuild, &mut build, &mut build2);
             field.update(&mut update);
             field.declare(&mut declare);
 
@@ -167,10 +168,7 @@ impl Tokenize for Transient {
                 })
                 .join(",");
 
-            let _ = write!(
-                build,
-                "let {el} = ::kobold::init!(_p.{el} = {anchor_type}::from({name}({args})));"
-            );
+            let _ = write!(build, "{el}: {anchor_type}::from({name}({args})),");
         }
         let anchor = &self.js.functions.last().unwrap().anchor;
 
@@ -217,13 +215,12 @@ impl Tokenize for Transient {
                 {{\
                     type Product = TransientProduct<{product_generics_binds}>;\
                     \
-                    fn build(self, _p: ::kobold::internal::In<Self::Product>) -> ::kobold::internal::Out<Self::Product> {{\
-                        _p.in_place(move |_p| unsafe {{\
+                    fn build(self) -> Self::Product {{\
+                        {prebuild}\
+                        TransientProduct {{\
                             {build}\
                             {build2}\
-                            \
-                            ::kobold::internal::Out::from_raw(_p)\
-                        }})\
+                        }}
                     }}\
                     \
                     fn update(self, p: &mut Self::Product) {{\
@@ -484,39 +481,31 @@ impl Field {
         let _ = write!(buf, "{name}: {typ},");
     }
 
-    fn build(&self, buf: &mut String, post: &mut String) {
+    fn build(&self, pre: &mut String, build: &mut String, build2: &mut String) {
         let Field { name, kind, .. } = self;
 
         match kind {
             FieldKind::StaticView => {
                 let _ = write!(
-                    buf,
+                    pre,
                     "\
-                    let {name} = std::pin::pin!(std::mem::MaybeUninit::uninit());\
-                    let {name} = ::kobold::internal::In::pinned({name}, move |_p| self.{name}.build(_p));\
+                    let {name} = self.{name}.build();\
                     "
                 );
             }
             FieldKind::View => {
-                let _ = write!(
-                    buf,
-                    "let {name} = ::kobold::init!(_p.{name} @ self.{name}.build(_p));"
-                );
+                let _ = write!(pre, "let {name} = self.{name}.build();");
+                let _ = write!(build2, "{name},");
             }
             FieldKind::Event { .. } => {
-                let _ = write!(
-                    buf,
-                    "let mut {name} = ::kobold::init!(_p.{name} @ self.{name}.build(_p));"
-                );
+                let _ = write!(pre, "let mut {name} = self.{name}.build();");
+                let _ = write!(build2, "{name},");
             }
             FieldKind::Attribute { attr, .. } if attr.abi.is_some() => {
-                let _ = write!(post, "::kobold::init!(_p.{name} = self.{name}.build());");
+                let _ = write!(build2, "{name}: self.{name}.build(),");
             }
             FieldKind::Attribute { el, prop, .. } => {
-                let _ = write!(
-                    post,
-                    "::kobold::init!(_p.{name} = self.{name}.build_in({prop}, &{el}));"
-                );
+                let _ = write!(build2, "{name}: self.{name}.build_in({prop}, &{el}),");
             }
         }
     }
