@@ -163,7 +163,7 @@ where
         let hook = unsafe { self.0.as_ref() };
 
         // There might be conflicts on the hashes here, but that's okay
-        // as we are going to rely on unique nature of `StateId`
+        // as we are going to rely on unique nature of `StateId`.
         //
         // Ideally the first condition will be evaluated at compile time
         // and this whole branch is gone if `T` isn't the same type as `S`.
@@ -178,7 +178,10 @@ where
 }
 
 pub trait Context {
-    type Nest<S: 'static>: Context;
+    type Nest<'hook, S>: Context + 'hook
+    where
+        S: 'static,
+        Self: 'hook;
 
     fn eid(&self) -> EventId;
 
@@ -186,9 +189,10 @@ pub trait Context {
     where
         E: EventCast;
 
-    fn attach<S>(&self, hook: &Hook<S>) -> Self::Nest<S>
+    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Nest<'hook, S>
     where
-        S: 'static;
+        S: 'static,
+        Self: 'hook;
 
     fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
     where
@@ -200,7 +204,10 @@ impl<'event, T> Context for ContextBase<'event, T>
 where
     T: ContextHelper,
 {
-    type Nest<S: 'static> = ContextBase<'event, (NonNull<Hook<S>>, T)>;
+    type Nest<'hook, S> = ContextBase<'hook, (NonNull<Hook<S>>, T)>
+    where
+        S: 'static,
+        Self: 'hook;
 
     fn eid(&self) -> EventId {
         self.eid
@@ -213,9 +220,10 @@ where
         unsafe { &*(&self.event as *const _ as *const E) }
     }
 
-    fn attach<S>(&self, hook: &Hook<S>) -> Self::Nest<S>
+    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Nest<'hook, S>
     where
         S: 'static,
+        Self: 'hook,
     {
         ContextBase {
             eid: self.eid,
