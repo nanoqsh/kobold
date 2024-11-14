@@ -2,31 +2,28 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::cell::UnsafeCell;
 // use std::future::Future;
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
 use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{self, Context, EventId, ShouldRender, StateId, Then, Trigger};
+use crate::runtime::{EventContext, EventId, ShouldRender, StateId, Then, Trigger};
 use crate::{internal, View};
 
 pub struct Signal<S> {
-    inner: *const UnsafeCell<S>,
-    _id: StateId,
+    _sid: StateId,
+    _state: PhantomData<*mut S>,
 }
 
 impl<S> Signal<S> {
     pub(crate) fn new(hook: &Hook<S>) -> Self {
-        let inner = &hook.inner;
-
         Signal {
-            inner,
-            _id: hook.id,
+            _sid: hook.sid,
+            _state: PhantomData,
         }
     }
 
@@ -49,24 +46,20 @@ impl<S> Signal<S> {
     ///     })
     /// }
     /// ```
-    pub fn update<F, O>(&self, mutator: F)
+    pub fn update<F, O>(&self, _mutator: F)
     where
         F: FnOnce(&mut S) -> O,
         O: ShouldRender,
     {
-        // TODO: handle StateId
-        let state = unsafe { &mut *(*self.inner).get() };
-
-        runtime::lock_update(move || mutator(state))
+        todo!()
     }
 
     /// Same as [`update`](Signal::update), but it never renders updates.
-    pub fn update_silent<F>(&self, mutator: F)
+    pub fn update_silent<F>(&self, _mutator: F)
     where
         F: FnOnce(&mut S),
     {
-        // TODO: handle StateId
-        mutator(unsafe { &mut *(*self.inner).get() });
+        todo!()
     }
 
     /// Replace the entire state with a new value and trigger an update.
@@ -76,28 +69,34 @@ impl<S> Signal<S> {
 }
 
 pub struct Hook<S> {
-    inner: UnsafeCell<S>,
-    pub(crate) id: StateId,
+    inner: S,
+    sid: StateId,
 }
 
 impl<S> Deref for Hook<S> {
     type Target = S;
 
     fn deref(&self) -> &S {
-        unsafe { &*self.inner.get() }
+        &self.inner
+    }
+}
+
+impl<S> DerefMut for Hook<S> {
+    fn deref_mut(&mut self) -> &mut S {
+        &mut self.inner
     }
 }
 
 impl<S> Hook<S> {
     pub(crate) fn new(inner: S) -> Self {
         Hook {
-            inner: UnsafeCell::new(inner),
-            id: StateId::next(),
+            inner,
+            sid: StateId::next(),
         }
     }
 
-    pub(crate) fn as_ptr(&self) -> *mut S {
-        self.inner.get()
+    pub(crate) fn is(&self, sid: StateId) -> bool {
+        self.sid == sid
     }
 
     /// Binds a closure to a mutable reference of the state. While this method is public
@@ -110,7 +109,7 @@ impl<S> Hook<S> {
         O: ShouldRender,
     {
         Bound {
-            sid: self.id,
+            sid: self.sid,
             callback,
             _marker: PhantomData,
         }
@@ -221,13 +220,13 @@ where
     F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
+    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
         if ctx.eid() != self.eid {
             return None;
         }
 
-        ctx.with_state(self.sid, |state| {
-            Some((self.callback)(state, ctx.event()).then())
+        ctx.with(self.sid, move |state, event| {
+            Some((self.callback)(state, event).then())
         })
     }
 }

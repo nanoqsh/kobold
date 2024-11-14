@@ -100,7 +100,7 @@ use web_sys::Node;
 
 use crate::dom::Anchor;
 use crate::internal::empty_node;
-use crate::runtime::{Context, Then, Trigger};
+use crate::runtime::{EventContext, Then, Trigger};
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -182,7 +182,7 @@ macro_rules! branch {
                 $var: Trigger,
             )*
         {
-            fn trigger<Ctx: Context>(&mut self, ctx: &mut Ctx) -> Option<Then> {
+            fn trigger<Ctx: EventContext>(&mut self, ctx: &mut Ctx) -> Option<Then> {
                 match self {
                     $(
                         $name::$var(p) => p.trigger(ctx),

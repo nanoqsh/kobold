@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{Context, Then, Trigger};
+use crate::runtime::{EventContext, Then, Trigger};
 use crate::{Mountable, View};
 
 pub struct BoundedProduct<P: Mountable, const N: usize> {
@@ -111,7 +111,7 @@ impl<P, const N: usize> Trigger for BoundedProduct<P, N>
 where
     P: Mountable,
 {
-    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
+    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
         self.list.iter_mut().find_map(|p| p.trigger(ctx))
     }
 }

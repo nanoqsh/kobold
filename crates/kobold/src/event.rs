@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
-use crate::runtime::{Context, EventId, Then, Trigger};
+use crate::runtime::{EventContext, EventId, Then, Trigger};
 
 #[wasm_bindgen]
 extern "C" {
@@ -170,7 +170,7 @@ where
     F: Fn(&E) + 'static,
     E: EventCast,
 {
-    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
+    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
         if ctx.eid() == self.eid {
             (self.closure)(ctx.event());
 

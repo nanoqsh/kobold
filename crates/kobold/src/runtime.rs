@@ -11,9 +11,9 @@ use crate::{internal, Mountable, View};
 
 mod ctx;
 
-use ctx::ContextBase;
+use ctx::EventCtx;
 
-pub use ctx::Context;
+pub use ctx::EventContext;
 
 struct RuntimeData<P, T, U> {
     product: P,
@@ -22,15 +22,15 @@ struct RuntimeData<P, T, U> {
 }
 
 trait Runtime {
-    fn update(&mut self, ctx: Option<&mut ContextBase>);
+    fn update(&mut self, ctx: Option<&mut EventCtx>);
 }
 
 impl<P, T, U> Runtime for RuntimeData<P, T, U>
 where
-    T: Fn(NonNull<P>, &mut ContextBase) -> Option<Then>,
+    T: Fn(NonNull<P>, &mut EventCtx) -> Option<Then>,
     U: Fn(NonNull<P>),
 {
-    fn update(&mut self, ctx: Option<&mut ContextBase>) {
+    fn update(&mut self, ctx: Option<&mut EventCtx>) {
         let p = NonNull::from(&mut self.product);
 
         if let Some(ctx) = ctx {
@@ -121,7 +121,7 @@ impl EventId {
 }
 
 pub trait Trigger {
-    fn trigger<C: Context>(&mut self, _: &mut C) -> Option<Then> {
+    fn trigger<C: EventContext>(&mut self, _: &mut C) -> Option<Then> {
         None
     }
 }
@@ -147,7 +147,7 @@ where
 
     let runtime = Box::new(RuntimeData {
         product: render().build(),
-        trigger: move |mut p: NonNull<_>, ctx: &mut ContextBase| {
+        trigger: move |mut p: NonNull<_>, ctx: &mut EventCtx| {
             let p: &mut V::Product = unsafe { p.as_mut() };
 
             p.trigger(ctx)
@@ -164,7 +164,7 @@ where
 
 pub(crate) fn trigger(eid: EventId, event: Event) {
     if let Some(runtime) = RUNTIME.get() {
-        let mut ctx = ContextBase::new(eid, &event);
+        let mut ctx = EventCtx::new(eid, &event);
 
         unsafe { (*runtime.as_ptr()).update(Some(&mut ctx)) }
     }
