@@ -129,7 +129,7 @@ where
     where
         E: EventCast,
     {
-        unsafe { &*(&self.event as *const _ as *const E) }
+        E::cast_from(&self.event)
     }
 
     fn attach<'b, S>(&'b mut self, hook: &'b mut Hook<S>) -> Self::Attached<'b, S>
@@ -151,7 +151,7 @@ where
         F: Fn(&mut S, &E) -> O,
         O: Into<Then>,
     {
-        let event = unsafe { &*(&self.event as *const _ as *const E) };
+        let event = E::cast_from(&self.event);
 
         self.states
             .with_state(id, move |state| then(state, event).into())

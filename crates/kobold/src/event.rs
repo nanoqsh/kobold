@@ -35,16 +35,11 @@ macro_rules! event {
                 _target: PhantomData<T>,
             }
 
-            impl<T> From<web_sys::Event> for $event<T> {
-                fn from(event: web_sys::Event) -> Self {
-                    $event {
-                        event: event.unchecked_into(),
-                        _target: PhantomData,
-                    }
+            impl<T> EventCast for $event<T> {
+                fn cast_from(e: &web_sys::Event) -> &Self {
+                    unsafe { &*(e as *const _ as *const Self) }
                 }
             }
-
-            impl<T> EventCast for $event<T> {}
 
             impl<T> Deref for $event<T> {
                 type Target = web_sys::$event;
@@ -79,9 +74,15 @@ macro_rules! event {
 }
 
 mod sealed {
-    pub trait EventCast: From<web_sys::Event> {}
+    pub trait EventCast {
+        fn cast_from(e: &web_sys::Event) -> &Self;
+    }
 
-    impl EventCast for web_sys::Event {}
+    impl EventCast for web_sys::Event {
+        fn cast_from(e: &web_sys::Event) -> &Self {
+            e
+        }
+    }
 }
 
 pub(crate) use sealed::EventCast;
