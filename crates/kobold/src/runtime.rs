@@ -178,7 +178,7 @@ where
 }
 
 pub trait Context {
-    type Nest<'hook, S>: Context + 'hook
+    type Attached<'hook, S>: Context + 'hook
     where
         S: 'static,
         Self: 'hook;
@@ -189,7 +189,7 @@ pub trait Context {
     where
         E: EventCast;
 
-    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Nest<'hook, S>
+    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Attached<'hook, S>
     where
         S: 'static,
         Self: 'hook;
@@ -204,7 +204,7 @@ impl<'event, T> Context for ContextBase<'event, T>
 where
     T: ContextHelper,
 {
-    type Nest<'hook, S> = ContextBase<'hook, (NonNull<Hook<S>>, T)>
+    type Attached<'hook, S> = ContextBase<'hook, (NonNull<Hook<S>>, T)>
     where
         S: 'static,
         Self: 'hook;
@@ -220,7 +220,7 @@ where
         unsafe { &*(&self.event as *const _ as *const E) }
     }
 
-    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Nest<'hook, S>
+    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Attached<'hook, S>
     where
         S: 'static,
         Self: 'hook,
