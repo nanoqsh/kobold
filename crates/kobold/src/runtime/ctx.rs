@@ -153,6 +153,7 @@ where
     {
         let event = unsafe { &*(&self.event as *const _ as *const E) };
 
-        self.states.with_state(id, move |state| then(state, event).into())
+        self.states
+            .with_state(id, move |state| then(state, event).into())
     }
 }

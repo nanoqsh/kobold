@@ -3,7 +3,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use std::cell::Cell;
-use std::ptr::NonNull;
 
 use web_sys::Event;
 
@@ -15,9 +14,8 @@ use ctx::EventCtx;
 
 pub use ctx::EventContext;
 
-struct RuntimeData<P, T, U> {
+struct RuntimeData<P, U> {
     product: P,
-    trigger: T,
     update: U,
 }
 
@@ -25,18 +23,16 @@ trait Runtime {
     fn update(&mut self, ctx: Option<&mut EventCtx>);
 }
 
-impl<P, T, U> Runtime for RuntimeData<P, T, U>
+impl<P, U> Runtime for RuntimeData<P, U>
 where
-    T: Fn(NonNull<P>, &mut EventCtx) -> Option<Then>,
-    U: Fn(NonNull<P>),
+    P: Trigger,
+    U: Fn(&mut P),
 {
     fn update(&mut self, ctx: Option<&mut EventCtx>) {
-        let p = NonNull::from(&mut self.product);
+        let p = &mut self.product;
 
         if let Some(ctx) = ctx {
-            (self.trigger)(p, ctx);
-
-            if let Some(Then::Stop) = (self.trigger)(p, ctx) {
+            if let Some(Then::Stop) = p.trigger(ctx) {
                 return;
             }
         }
@@ -96,7 +92,7 @@ pub trait Trigger {
 thread_local! {
     static INIT: Cell<bool> = const { Cell::new(false) };
 
-    static RUNTIME: Cell<Option<NonNull<dyn Runtime>>> = const { Cell::new(None) };
+    static RUNTIME: Cell<Option<&mut dyn Runtime>> = const { Cell::new(None) };
 }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
@@ -114,26 +110,21 @@ where
 
     let runtime = Box::new(RuntimeData {
         product: render().build(),
-        trigger: move |mut p: NonNull<_>, ctx: &mut EventCtx| {
-            let p: &mut V::Product = unsafe { p.as_mut() };
-
-            p.trigger(ctx)
-        },
-        update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
+        update: move |p: &mut V::Product| render().update(p),
     });
 
     internal::append_body(runtime.product.js());
 
-    let runtime = NonNull::from(Box::leak(runtime));
-
-    RUNTIME.set(Some(runtime));
+    RUNTIME.set(Some(Box::leak(runtime)));
 }
 
 pub(crate) fn trigger(eid: EventId, event: Event) {
-    if let Some(runtime) = RUNTIME.get() {
+    if let Some(runtime) = RUNTIME.take() {
         let mut ctx = EventCtx::new(eid, &event);
 
-        unsafe { (*runtime.as_ptr()).update(Some(&mut ctx)) }
+        runtime.update(Some(&mut ctx));
+
+        RUNTIME.set(Some(runtime));
     }
 }
 
@@ -142,13 +133,9 @@ where
     F: FnOnce() -> R,
     R: Into<Then>,
 {
-    debug_assert!(RUNTIME.get().is_some(), "Cyclical update detected");
-
     if let Some(runtime) = RUNTIME.take() {
         if let Then::Render = f().into() {
-            unsafe {
-                (*runtime.as_ptr()).update(None);
-            }
+            runtime.update(None);
         }
 
         RUNTIME.set(Some(runtime));
