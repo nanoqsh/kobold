@@ -8,7 +8,7 @@ use crate::event::EventCast;
 use crate::runtime::{EventId, StateId, Then};
 use crate::state::Hook;
 
-pub(super) struct EventCtx<'a, T = ()> {
+pub struct EventCtx<'a, T = ()> {
     eid: EventId,
     event: &'a Event,
     states: T,
@@ -32,7 +32,7 @@ pub trait ContextState<'a> {
     fn with_state<S, F>(&mut self, id: StateId, then: F) -> Option<Then>
     where
         S: 'static,
-        F: Fn(&mut S) -> Option<Then>;
+        F: Fn(&mut S) -> Then;
 
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b>;
 }
@@ -42,7 +42,7 @@ impl ContextState<'_> for () {
 
     fn with_state<S, F>(&mut self, _: StateId, _: F) -> Option<Then>
     where
-        F: Fn(&mut S) -> Option<Then>,
+        F: Fn(&mut S) -> Then,
     {
         None
     }
@@ -64,7 +64,7 @@ where
     fn with_state<S, F>(&mut self, sid: StateId, then: F) -> Option<Then>
     where
         S: 'static,
-        F: Fn(&mut S) -> Option<Then>,
+        F: Fn(&mut S) -> Then,
     {
         use std::any::TypeId;
 
@@ -76,7 +76,7 @@ where
         if TypeId::of::<T>() == TypeId::of::<S>() && self.0.is(sid) {
             let cast_hook = unsafe { &mut *(self.0 as *mut Hook<T> as *mut Hook<S>) };
 
-            return then(cast_hook);
+            return Some(then(cast_hook));
         }
 
         self.1.with_state(sid, then)
@@ -104,11 +104,12 @@ pub trait EventContext {
         S: 'static,
         Self: 'b;
 
-    fn with<S, E, F>(&mut self, id: StateId, then: F) -> Option<Then>
+    fn with<S, E, F, O>(&mut self, id: StateId, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
-        F: Fn(&mut S, &E) -> Option<Then>;
+        F: Fn(&mut S, &E) -> O,
+        O: Into<Then>;
 }
 
 impl<'a, T> EventContext for EventCtx<'a, T>
@@ -143,14 +144,15 @@ where
         }
     }
 
-    fn with<S, E, F>(&mut self, id: StateId, then: F) -> Option<Then>
+    fn with<S, E, F, O>(&mut self, id: StateId, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
-        F: Fn(&mut S, &E) -> Option<Then>,
+        F: Fn(&mut S, &E) -> O,
+        O: Into<Then>,
     {
         let event = unsafe { &*(&self.event as *const _ as *const E) };
 
-        self.states.with_state(id, move |state| then(state, event))
+        self.states.with_state(id, move |state| then(state, event).into())
     }
 }

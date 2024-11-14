@@ -11,7 +11,7 @@ use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{EventContext, EventId, ShouldRender, StateId, Then, Trigger};
+use crate::runtime::{EventContext, EventId, StateId, Then, Trigger};
 use crate::{internal, View};
 
 pub struct Signal<S> {
@@ -49,7 +49,7 @@ impl<S> Signal<S> {
     pub fn update<F, O>(&self, _mutator: F)
     where
         F: FnOnce(&mut S) -> O,
-        O: ShouldRender,
+        O: Into<Then>,
     {
         todo!()
     }
@@ -106,7 +106,7 @@ impl<S> Hook<S> {
         S: 'static,
         E: EventCast,
         F: Fn(&mut S, &E) -> O + 'static,
-        O: ShouldRender,
+        O: Into<Then>,
     {
         Bound {
             sid: self.sid,
@@ -182,7 +182,7 @@ where
     S: 'static,
     E: EventCast,
     F: Fn(&mut S, &E) -> O + 'static,
-    O: ShouldRender,
+    O: Into<Then>,
 {
     type Product = BoundProduct<E, S, F>;
 
@@ -206,7 +206,7 @@ where
     S: 'static,
     E: EventCast,
     F: Fn(&mut S, &E) -> O + 'static,
-    O: ShouldRender,
+    O: Into<Then>,
 {
     fn js_value(&mut self) -> JsValue {
         internal::make_event_handler(self.eid.0)
@@ -218,15 +218,13 @@ where
     S: 'static,
     E: EventCast,
     F: Fn(&mut S, &E) -> O + 'static,
-    O: ShouldRender,
+    O: Into<Then>,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
         if ctx.eid() != self.eid {
             return None;
         }
 
-        ctx.with(self.sid, move |state, event| {
-            Some((self.callback)(state, event).then())
-        })
+        ctx.with(self.sid, &self.callback)
     }
 }

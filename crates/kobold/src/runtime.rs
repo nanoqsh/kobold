@@ -46,32 +46,6 @@ where
 }
 
 /// Describes whether or not a component should be rendered after state changes.
-/// For uses see:
-///
-/// * [`Hook::bind`](crate::stateful::Hook::bind)
-/// * [`IntoState::update`](crate::stateful::IntoState::update)
-pub trait ShouldRender: 'static {
-    fn should_render(self) -> bool;
-
-    fn then(self) -> Then;
-}
-
-/// Closures without return type always update their view.
-impl ShouldRender for () {
-    fn should_render(self) -> bool {
-        true
-    }
-
-    fn then(self) -> Then {
-        Then::Render
-    }
-}
-
-/// An enum that implements the [`ShouldRender`](ShouldRender) trait.
-/// See:
-///
-/// * [`Hook::bind`](crate::stateful::Hook::bind)
-/// * [`IntoState::update`](crate::stateful::IntoState::update)
 pub enum Then {
     /// This is a silent update
     Stop,
@@ -79,16 +53,9 @@ pub enum Then {
     Render,
 }
 
-impl ShouldRender for Then {
-    fn should_render(self) -> bool {
-        match self {
-            Then::Stop => false,
-            Then::Render => true,
-        }
-    }
-
-    fn then(self) -> Then {
-        self
+impl From<()> for Then {
+    fn from(_: ()) -> Self {
+        Then::Render
     }
 }
 
@@ -173,12 +140,12 @@ pub(crate) fn trigger(eid: EventId, event: Event) {
 pub(crate) fn lock_update<F, R>(f: F)
 where
     F: FnOnce() -> R,
-    R: ShouldRender,
+    R: Into<Then>,
 {
     debug_assert!(RUNTIME.get().is_some(), "Cyclical update detected");
 
     if let Some(runtime) = RUNTIME.take() {
-        if f().should_render() {
+        if let Then::Render = f().into() {
             unsafe {
                 (*runtime.as_ptr()).update(None);
             }
