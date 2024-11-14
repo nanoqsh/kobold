@@ -18,15 +18,15 @@ struct RuntimeData<P, T, U> {
 }
 
 trait Runtime {
-    fn update(&mut self, ctx: Option<&ContextBase>);
+    fn update(&mut self, ctx: Option<&mut ContextBase>);
 }
 
 impl<P, T, U> Runtime for RuntimeData<P, T, U>
 where
-    T: Fn(NonNull<P>, &ContextBase) -> Option<Then>,
+    T: Fn(NonNull<P>, &mut ContextBase) -> Option<Then>,
     U: Fn(NonNull<P>),
 {
-    fn update(&mut self, ctx: Option<&ContextBase>) {
+    fn update(&mut self, ctx: Option<&mut ContextBase>) {
         let p = NonNull::from(&mut self.product);
 
         if let Some(ctx) = ctx {
@@ -242,7 +242,7 @@ where
 }
 
 pub trait Trigger {
-    fn trigger<C: Context>(&self, _: &C) -> Option<Then> {
+    fn trigger<C: Context>(&mut self, _: &mut C) -> Option<Then> {
         None
     }
 }
@@ -268,7 +268,7 @@ where
 
     let runtime = Box::new(RuntimeData {
         product: render().build(),
-        trigger: move |mut p: NonNull<_>, ctx: &ContextBase| {
+        trigger: move |mut p: NonNull<_>, ctx: &mut ContextBase| {
             let p: &mut V::Product = unsafe { p.as_mut() };
 
             p.trigger(ctx)

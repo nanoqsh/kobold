@@ -151,7 +151,7 @@ impl<D, P> Trigger for Fence<D, P>
 where
     P: Trigger,
 {
-    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
+    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
         self.inner.trigger(ctx)
     }
 }

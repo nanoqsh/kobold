@@ -110,7 +110,7 @@ impl<P> Trigger for ListProduct<P>
 where
     P: Mountable,
 {
-    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
-        self.list.iter().find_map(|p| p.trigger(ctx))
+    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
+        self.list.iter_mut().find_map(|p| p.trigger(ctx))
     }
 }

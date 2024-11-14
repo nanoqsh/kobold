@@ -221,7 +221,7 @@ where
     F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
+    fn trigger<C: Context>(&mut self, ctx: &mut C) -> Option<Then> {
         if ctx.eid() != self.eid {
             return None;
         }

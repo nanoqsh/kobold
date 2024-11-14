@@ -182,7 +182,7 @@ macro_rules! branch {
                 $var: Trigger,
             )*
         {
-            fn trigger<Ctx: Context>(&self, ctx: &Ctx) -> Option<Then> {
+            fn trigger<Ctx: Context>(&mut self, ctx: &mut Ctx) -> Option<Then> {
                 match self {
                     $(
                         $name::$var(p) => p.trigger(ctx),
