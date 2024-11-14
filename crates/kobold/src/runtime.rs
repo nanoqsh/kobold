@@ -7,9 +7,13 @@ use std::ptr::NonNull;
 
 use web_sys::Event;
 
-use crate::event::EventCast;
-use crate::state::Hook;
 use crate::{internal, Mountable, View};
+
+mod ctx;
+
+use ctx::ContextBase;
+
+pub use ctx::Context;
 
 struct RuntimeData<P, T, U> {
     product: P,
@@ -113,131 +117,6 @@ impl EventId {
         static ID: AtomicU32 = AtomicU32::new(0);
 
         EventId(ID.fetch_add(1, Ordering::Relaxed))
-    }
-}
-
-struct ContextBase<'event, T = ()> {
-    eid: EventId,
-    event: &'event Event,
-    states: T,
-}
-
-impl<'event> ContextBase<'event> {
-    fn new(eid: EventId, event: &'event Event) -> Self {
-        ContextBase {
-            eid,
-            event,
-            states: (),
-        }
-    }
-}
-
-trait ContextHelper: Copy + 'static {
-    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
-    where
-        S: 'static,
-        F: Fn(&mut S) -> Option<Then>;
-}
-
-impl ContextHelper for () {
-    fn with_state<S, F>(&self, _: StateId, _: F) -> Option<Then>
-    where
-        F: Fn(&mut S) -> Option<Then>,
-    {
-        None
-    }
-}
-
-impl<'a, T, U> ContextHelper for (NonNull<Hook<T>>, U)
-where
-    T: 'static,
-    U: ContextHelper + 'static,
-{
-    fn with_state<S, F>(&self, sid: StateId, then: F) -> Option<Then>
-    where
-        S: 'static,
-        F: Fn(&mut S) -> Option<Then>,
-    {
-        use std::any::TypeId;
-
-        let hook = unsafe { self.0.as_ref() };
-
-        // There might be conflicts on the hashes here, but that's okay
-        // as we are going to rely on unique nature of `StateId`.
-        //
-        // Ideally the first condition will be evaluated at compile time
-        // and this whole branch is gone if `T` isn't the same type as `S`.
-        if TypeId::of::<T>() == TypeId::of::<S>() && hook.id == sid {
-            let state_ptr = hook.as_ptr() as *mut S;
-
-            return then(unsafe { &mut *state_ptr });
-        }
-
-        self.1.with_state(sid, then)
-    }
-}
-
-pub trait Context {
-    type Attached<'hook, S>: Context + 'hook
-    where
-        S: 'static,
-        Self: 'hook;
-
-    fn eid(&self) -> EventId;
-
-    fn event<E>(&self) -> &E
-    where
-        E: EventCast;
-
-    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Attached<'hook, S>
-    where
-        S: 'static,
-        Self: 'hook;
-
-    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
-    where
-        S: 'static,
-        F: Fn(&mut S) -> Option<Then>;
-}
-
-impl<'event, T> Context for ContextBase<'event, T>
-where
-    T: ContextHelper,
-{
-    type Attached<'hook, S> = ContextBase<'hook, (NonNull<Hook<S>>, T)>
-    where
-        S: 'static,
-        Self: 'hook;
-
-    fn eid(&self) -> EventId {
-        self.eid
-    }
-
-    fn event<E>(&self) -> &E
-    where
-        E: EventCast,
-    {
-        unsafe { &*(&self.event as *const _ as *const E) }
-    }
-
-    fn attach<'hook, S>(&self, hook: &'hook Hook<S>) -> Self::Attached<'hook, S>
-    where
-        S: 'static,
-        Self: 'hook,
-    {
-        ContextBase {
-            eid: self.eid,
-            event: self.event,
-            states: (hook.into(), self.states),
-        }
-    }
-
-    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
-    where
-        S: 'static,
-        F: Fn(&mut S) -> Option<Then>,
-    {
-        self.states.with_state(id, then)
     }
 }
 
