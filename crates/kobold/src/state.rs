@@ -106,12 +106,13 @@ where
 
 impl<S, P> Trigger for StatefulProduct<S, P>
 where
+    S: 'static,
     P: Trigger,
 {
-    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
-        ctx.with_state(self.state.id, self.state.as_ptr(), |ctx| {
-            self.product.trigger(ctx)
-        })
+    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
+        let ctx = ctx.attach(&self.state);
+
+        self.product.trigger(&ctx)
     }
 }
 
@@ -164,7 +165,7 @@ impl<S, P, D> Trigger for OnceProduct<S, P, D>
 where
     StatefulProduct<S, P>: Trigger,
 {
-    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
         self.inner.trigger(ctx)
     }
 }

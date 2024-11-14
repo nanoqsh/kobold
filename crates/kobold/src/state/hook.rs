@@ -77,7 +77,7 @@ impl<S> Signal<S> {
 
 pub struct Hook<S> {
     inner: UnsafeCell<S>,
-    pub(super) id: StateId,
+    pub(crate) id: StateId,
 }
 
 impl<S> Deref for Hook<S> {
@@ -221,18 +221,13 @@ where
     F: Fn(&mut S, &E) -> O + 'static,
     O: ShouldRender,
 {
-    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
         if ctx.eid() != self.eid {
             return None;
         }
 
-        match ctx.get_state_ptr(self.sid) {
-            Some(ptr) => {
-                let state = unsafe { &mut *(ptr as *mut S) };
-
-                Some((self.callback)(state, ctx.event()).then())
-            }
-            None => None,
-        }
+        ctx.with_state(self.sid, |state| {
+            Some((self.callback)(state, ctx.event()).then())
+        })
     }
 }

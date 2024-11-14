@@ -90,8 +90,8 @@ mod hidden {
     use super::wasm_bindgen;
 
     #[wasm_bindgen(js_name = "koboldTrigger")]
-    pub fn kobold_trigger(event: web_sys::Event, eid: u32) {
-        trigger(event, EventId(eid));
+    pub fn kobold_trigger(eid: u32, event: web_sys::Event) {
+        trigger(EventId(eid), event);
     }
 }
 

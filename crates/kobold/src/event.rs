@@ -170,7 +170,7 @@ where
     F: Fn(&E) + 'static,
     E: EventCast,
 {
-    fn trigger(&self, ctx: &mut Context) -> Option<Then> {
+    fn trigger<C: Context>(&self, ctx: &C) -> Option<Then> {
         if ctx.eid() == self.eid {
             (self.closure)(ctx.event());
 

@@ -7,24 +7,26 @@ use std::ptr::NonNull;
 
 use web_sys::Event;
 
-use crate::{event::EventCast, internal, Mountable, View};
+use crate::event::EventCast;
+use crate::state::Hook;
+use crate::{internal, Mountable, View};
 
-struct RuntimeData<P, F, T> {
+struct RuntimeData<P, T, U> {
     product: P,
-    update: F,
     trigger: T,
+    update: U,
 }
 
 trait Runtime {
-    fn update(&mut self, ctx: Option<&mut Context>);
+    fn update(&mut self, ctx: Option<&ContextBase>);
 }
 
-impl<P, F, T> Runtime for RuntimeData<P, F, T>
+impl<P, T, U> Runtime for RuntimeData<P, T, U>
 where
-    F: Fn(NonNull<P>),
-    T: Fn(NonNull<P>, &mut Context) -> Option<Then>,
+    T: Fn(NonNull<P>, &ContextBase) -> Option<Then>,
+    U: Fn(NonNull<P>),
 {
-    fn update(&mut self, ctx: Option<&mut Context>) {
+    fn update(&mut self, ctx: Option<&ContextBase>) {
         let p = NonNull::from(&mut self.product);
 
         if let Some(ctx) = ctx {
@@ -114,79 +116,125 @@ impl EventId {
     }
 }
 
-pub struct Context {
+struct ContextBase<'event, T = ()> {
     eid: EventId,
-    event: Event,
-    state: Option<NonNull<StateFrame>>,
+    event: &'event Event,
+    states: T,
 }
 
-struct StateFrame {
-    sid: StateId,
-    ptr: *mut (),
-    next: Option<NonNull<Self>>,
-}
-
-impl Context {
-    const fn new(eid: EventId, event: Event) -> Self {
-        Context {
+impl<'event> ContextBase<'event> {
+    fn new(eid: EventId, event: &'event Event) -> Self {
+        ContextBase {
             eid,
             event,
-            state: None,
+            states: (),
         }
     }
+}
 
-    pub(crate) fn eid(&self) -> EventId {
+trait ContextHelper: Copy + 'static {
+    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
+    where
+        S: 'static,
+        F: Fn(&mut S) -> Option<Then>;
+}
+
+impl ContextHelper for () {
+    fn with_state<S, F>(&self, _: StateId, _: F) -> Option<Then>
+    where
+        F: Fn(&mut S) -> Option<Then>,
+    {
+        None
+    }
+}
+
+impl<'a, T, U> ContextHelper for (NonNull<Hook<T>>, U)
+where
+    T: 'static,
+    U: ContextHelper + 'static,
+{
+    fn with_state<S, F>(&self, sid: StateId, then: F) -> Option<Then>
+    where
+        S: 'static,
+        F: Fn(&mut S) -> Option<Then>,
+    {
+        use std::any::TypeId;
+
+        let hook = unsafe { self.0.as_ref() };
+
+        // There might be conflicts on the hashes here, but that's okay
+        // as we are going to rely on unique nature of `StateId`
+        //
+        // Ideally the first condition will be evaluated at compile time
+        // and this whole branch is gone if `T` isn't the same type as `S`.
+        if TypeId::of::<T>() == TypeId::of::<S>() && hook.id == sid {
+            let state_ptr = hook.as_ptr() as *mut S;
+
+            return then(unsafe { &mut *state_ptr });
+        }
+
+        self.1.with_state(sid, then)
+    }
+}
+
+pub trait Context {
+    type Nest<S: 'static>: Context;
+
+    fn eid(&self) -> EventId;
+
+    fn event<E>(&self) -> &E
+    where
+        E: EventCast;
+
+    fn attach<S>(&self, hook: &Hook<S>) -> Self::Nest<S>
+    where
+        S: 'static;
+
+    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
+    where
+        S: 'static,
+        F: Fn(&mut S) -> Option<Then>;
+}
+
+impl<'event, T> Context for ContextBase<'event, T>
+where
+    T: ContextHelper,
+{
+    type Nest<S: 'static> = ContextBase<'event, (NonNull<Hook<S>>, T)>;
+
+    fn eid(&self) -> EventId {
         self.eid
     }
 
-    pub(crate) fn event<E>(&self) -> &E
+    fn event<E>(&self) -> &E
     where
         E: EventCast,
     {
         unsafe { &*(&self.event as *const _ as *const E) }
     }
 
-    pub(crate) fn with_state<F, S>(&mut self, sid: StateId, ptr: *mut S, then: F) -> Option<Then>
+    fn attach<S>(&self, hook: &Hook<S>) -> Self::Nest<S>
     where
-        F: FnOnce(&mut Self) -> Option<Then>,
+        S: 'static,
     {
-        // We assign current state stack frame to the next pointer
-        let state = StateFrame {
-            sid,
-            ptr: ptr as *mut _,
-            next: self.state,
-        };
-
-        // Then we replace it with a temporary reference to the new frame
-        self.state = Some(NonNull::from(&state));
-
-        let ret = then(self);
-
-        // Finally we restore the old frame, discarding the temporary new one
-        self.state = state.next;
-
-        ret
+        ContextBase {
+            eid: self.eid,
+            event: self.event,
+            states: (hook.into(), self.states),
+        }
     }
 
-    pub(crate) fn get_state_ptr(&mut self, sid: StateId) -> Option<*mut ()> {
-        let mut probe = self.state;
-
-        while let Some(state) = probe {
-            let state = unsafe { state.as_ref() };
-
-            if state.sid == sid {
-                return Some(state.ptr);
-            }
-
-            probe = state.next;
-        }
-
-        None
+    fn with_state<S, F>(&self, id: StateId, then: F) -> Option<Then>
+    where
+        S: 'static,
+        F: Fn(&mut S) -> Option<Then>,
+    {
+        self.states.with_state(id, then)
     }
 }
 
 pub trait Trigger {
-    fn trigger(&self, _: &mut Context) -> Option<Then> {
+    fn trigger<C: Context>(&self, _: &C) -> Option<Then> {
         None
     }
 }
@@ -212,12 +260,12 @@ where
 
     let runtime = Box::new(RuntimeData {
         product: render().build(),
-        update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
-        trigger: move |mut p: NonNull<_>, ctx: &mut Context| {
+        trigger: move |mut p: NonNull<_>, ctx: &ContextBase| {
             let p: &mut V::Product = unsafe { p.as_mut() };
 
             p.trigger(ctx)
         },
+        update: move |mut p: NonNull<_>| unsafe { render().update(p.as_mut()) },
     });
 
     internal::append_body(runtime.product.js());
@@ -227,9 +275,9 @@ where
     RUNTIME.set(Some(runtime));
 }
 
-pub(crate) fn trigger(event: Event, eid: EventId) {
+pub(crate) fn trigger(eid: EventId, event: Event) {
     if let Some(runtime) = RUNTIME.get() {
-        let mut ctx = Context::new(eid, event);
+        let mut ctx = ContextBase::new(eid, &event);
 
         unsafe { (*runtime.as_ptr()).update(Some(&mut ctx)) }
     }
