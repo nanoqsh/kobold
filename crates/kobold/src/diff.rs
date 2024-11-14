@@ -63,50 +63,6 @@ where
     }
 }
 
-// TODO! WTF IS THIS HERE FOR IF WE HAVE THE `static` KEYWORD?!
-//
-// /// Create a wrapper around a `view` that will prevent updates to it.
-// ///
-// /// This is effectively an unconditional [`fence`].
-// ///
-// /// ```
-// /// use kobold::prelude::*;
-// /// use kobold::diff::invar;
-// ///
-// /// #[component]
-// /// fn tag(label: &'static str) -> impl View {
-// ///     invar(move || view! {
-// ///         <span.tag>{ static label }</span>
-// ///     })
-// /// }
-// /// # fn main() {}
-// /// ```
-// pub const fn invar<F, V>(render: F) -> Invar<F>
-// where
-//     F: FnOnce() -> V,
-//     V: View,
-// {
-//     Invar(render)
-// }
-
-// /// Smart [`View`] that prevents updates, see [`invar`].
-// #[repr(transparent)]
-// pub struct Invar<F>(F);
-
-// impl<V, F> View for Invar<F>
-// where
-//     F: FnOnce() -> V,
-//     V: View,
-// {
-//     type Product = V::Product;
-
-//     fn build(self) -> Self::Product {
-//         (self.0)().build()
-//     }
-
-//     fn update(self, _: &mut Self::Product) {}
-// }
-
 /// Smart [`View`] that guards against unnecessary renders, see [`fence`].
 pub struct Fence<D, F> {
     guard: D,
