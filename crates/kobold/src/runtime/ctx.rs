@@ -75,6 +75,8 @@ pub trait ContextState<'a> {
         F: Fn(&mut S) -> Then;
 
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b>;
+
+    fn sid() -> StateId;
 }
 
 impl ContextState<'_> for () {
@@ -89,6 +91,10 @@ impl ContextState<'_> for () {
 
     fn borrow<'b>(&'b mut self) -> () {
         ()
+    }
+
+    fn sid() -> StateId {
+        StateId(0)
     }
 }
 
@@ -113,7 +119,7 @@ where
         //
         // Ideally the first condition will be evaluated at compile time
         // and this whole branch is gone if `T` isn't the same type as `S`.
-        if TypeId::of::<T>() == TypeId::of::<S>() && self.0.is(sid) {
+        if TypeId::of::<T>() == TypeId::of::<S>() && U::sid() == sid {
             // ⚠️ Safety:
             // ==========
             //
@@ -130,6 +136,10 @@ where
 
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b> {
         (self.0, self.1.borrow())
+    }
+
+    fn sid() -> StateId {
+        StateId(U::sid().0 + 1)
     }
 }
 
