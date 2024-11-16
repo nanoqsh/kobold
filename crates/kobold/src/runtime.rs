@@ -55,6 +55,14 @@ impl From<()> for Then {
     }
 }
 
+thread_local! {
+    static UNIQUE_ID: Cell<u32> = const { Cell::new(0) };
+
+    static INIT: Cell<bool> = const { Cell::new(false) };
+
+    static RUNTIME: Cell<Option<&mut dyn Runtime>> = const { Cell::new(None) };
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct StateId(pub(crate) u32);
@@ -65,21 +73,21 @@ pub struct EventId(pub(crate) u32);
 
 impl StateId {
     pub(crate) fn next() -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
+        let id = UNIQUE_ID.get();
 
-        static ID: AtomicU32 = AtomicU32::new(0);
+        UNIQUE_ID.set(id + 1);
 
-        StateId(ID.fetch_add(1, Ordering::Relaxed))
+        StateId(id)
     }
 }
 
 impl EventId {
     pub(crate) fn next() -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
+        let id = UNIQUE_ID.get();
 
-        static ID: AtomicU32 = AtomicU32::new(0);
+        UNIQUE_ID.set(id + 1);
 
-        EventId(ID.fetch_add(1, Ordering::Relaxed))
+        EventId(id)
     }
 }
 
@@ -87,12 +95,6 @@ pub trait Trigger {
     fn trigger<C: EventContext>(&mut self, _: &mut C) -> Option<Then> {
         None
     }
-}
-
-thread_local! {
-    static INIT: Cell<bool> = const { Cell::new(false) };
-
-    static RUNTIME: Cell<Option<&mut dyn Runtime>> = const { Cell::new(None) };
 }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
