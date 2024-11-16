@@ -55,7 +55,7 @@ fn app() -> impl View {
 
 #[component]
 fn entry_input(state: &Hook<State>) -> impl View + '_ {
-    let onchange = event!(|state, e: Event<InputElement>| {
+    let onchange = event!(|state, e: &Event<InputElement>| {
         let input = e.current_target();
         state.add(input.value());
 
@@ -82,7 +82,7 @@ fn toggle_all(active_count: usize, state: &Hook<State>) -> impl View + '_ {
 #[component]
 fn entry<'a>(idx: usize, entry: &'a Entry, state: &'a Hook<State>) -> impl View + 'a {
     let input = entry.editing.then(move || {
-        let onkeypress = event!(move |state, e: KeyboardEvent<InputElement>| {
+        let onkeypress = event!(move |state, e: &KeyboardEvent<InputElement>| {
             if e.key() == "Enter" {
                 state.update(idx, e.current_target().value());
 
@@ -91,7 +91,7 @@ fn entry<'a>(idx: usize, entry: &'a Entry, state: &'a Hook<State>) -> impl View 
                 Then::Stop
             }
         });
-        let onblur = event!(move |state, e: Event<InputElement>| {
+        let onblur = event!(move |state, e: &Event<InputElement>| {
             state.update(idx, e.current_target().value());
         });
 

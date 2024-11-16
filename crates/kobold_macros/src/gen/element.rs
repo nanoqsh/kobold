@@ -112,7 +112,7 @@ impl IntoGenerator for HtmlElement {
                             call(
                                 format_args!(
                                     "::kobold::internal::fn_type_hint::<\
-                                    &::kobold::event::{event}<\
+                                    ::kobold::event::{event}<\
                                         ::kobold::reexport::web_sys::{target}\
                                     >,\
                                     _,\
@@ -121,7 +121,7 @@ impl IntoGenerator for HtmlElement {
                                 expr.stream,
                             )
                         } else {
-                            (expr.stream, ".into_listener()").tokenize()
+                            expr.stream
                         };
 
                         let value = gen.add_field(coerce).event(event, el.typ).name;

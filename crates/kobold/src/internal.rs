@@ -16,7 +16,7 @@ pub struct Precompiled<F>(pub F);
 /// Helper function used by the [`view!`](crate::view) macro to provide type hints for
 /// event listeners.
 #[inline]
-pub const fn fn_type_hint<T, F: FnMut(T)>(f: F) -> F {
+pub const fn fn_type_hint<T, F: Fn(&T)>(f: F) -> F {
     f
 }
 

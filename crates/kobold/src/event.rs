@@ -96,24 +96,6 @@ event! {
     MouseEvent,
 }
 
-pub trait IntoListener<E: EventCast> {
-    type Listener: Listener<E>;
-
-    fn into_listener(self) -> Self::Listener;
-}
-
-impl<E, L> IntoListener<E> for L
-where
-    L: Listener<E>,
-    E: EventCast,
-{
-    type Listener = L;
-
-    fn into_listener(self) -> L {
-        self
-    }
-}
-
 pub trait Listener<E>
 where
     E: EventCast,
@@ -128,7 +110,7 @@ where
 
 impl<E, F> Listener<E> for F
 where
-    F: FnMut(&E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
     type Product = ListenerProduct<Self, E>;
@@ -158,7 +140,7 @@ pub trait ListenerHandle: Trigger {
 
 impl<F, E> ListenerHandle for ListenerProduct<F, E>
 where
-    F: FnMut(&E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
     fn js_value(&mut self) -> JsValue {
@@ -168,7 +150,7 @@ where
 
 impl<F, E> Trigger for ListenerProduct<F, E>
 where
-    F: FnMut(&E) + 'static,
+    F: Fn(&E) + 'static,
     E: EventCast,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
