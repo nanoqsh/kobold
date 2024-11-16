@@ -37,18 +37,28 @@ pub trait ContextState<'a> {
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b>;
 }
 
-impl ContextState<'_> for () {
-    type Borrow<'b> = ();
-
-    fn with_state<S, F>(&mut self, _: StateId, _: F) -> Option<Then>
+impl<'a, T> ContextState<'a> for &'a mut Hook<T> {
+    type Borrow<'b> = &'b mut Hook<T>
     where
+        Self: 'b;
+
+    fn with_state<S, F>(&mut self, _: StateId, then: F) -> Option<Then>
+    where
+        S: 'static,
         F: Fn(&mut S) -> Then,
     {
-        None
+        // ⚠️ Safety:
+        // ==========
+        //
+        // If we got to this point then this is the only state available on stack,
+        // which must be the correct state, therefore `T` == `S`.
+        let cast_hook = unsafe { &mut *(*self as *mut Hook<T> as *mut Hook<S>) };
+
+        Some(then(cast_hook))
     }
 
-    fn borrow<'b>(&'b mut self) -> () {
-        ()
+    fn borrow<'b>(&'b mut self) -> Self::Borrow<'b> {
+        self
     }
 }
 
@@ -116,6 +126,46 @@ pub trait EventContext {
         E: EventCast,
         F: Fn(&mut S, &E) -> O,
         O: Into<Then>;
+}
+
+impl<'a> EventContext for EventCtx<'a, ()> {
+    type Attached<'b, S> = EventCtx<'b, &'b mut Hook<S>>
+    where
+        S: 'static,
+        Self: 'b;
+
+    fn eid(&self) -> EventId {
+        self.eid
+    }
+
+    fn event<E>(&self) -> &E
+    where
+        E: EventCast,
+    {
+        E::cast_from(&self.event)
+    }
+
+    fn attach<'b, S>(&'b mut self, hook: &'b mut Hook<S>) -> Self::Attached<'b, S>
+    where
+        S: 'static,
+        Self: 'b,
+    {
+        EventCtx {
+            eid: self.eid,
+            event: self.event,
+            states: hook,
+        }
+    }
+
+    fn with<S, E, F, O>(&mut self, _: StateId, _: F) -> Option<Then>
+    where
+        S: 'static,
+        E: EventCast,
+        F: Fn(&mut S, &E) -> O,
+        O: Into<Then>,
+    {
+        None
+    }
 }
 
 impl<'a, T> EventContext for EventCtx<'a, T>
