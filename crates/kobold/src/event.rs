@@ -128,7 +128,7 @@ where
 
 impl<E, F> Listener<E> for F
 where
-    F: Fn(&E) + 'static,
+    F: FnMut(&E) + 'static,
     E: EventCast,
 {
     type Product = ListenerProduct<Self, E>;
@@ -158,7 +158,7 @@ pub trait ListenerHandle: Trigger {
 
 impl<F, E> ListenerHandle for ListenerProduct<F, E>
 where
-    F: Fn(&E) + 'static,
+    F: FnMut(&E) + 'static,
     E: EventCast,
 {
     fn js_value(&mut self) -> JsValue {
@@ -168,7 +168,7 @@ where
 
 impl<F, E> Trigger for ListenerProduct<F, E>
 where
-    F: Fn(&E) + 'static,
+    F: FnMut(&E) + 'static,
     E: EventCast,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {

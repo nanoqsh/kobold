@@ -119,11 +119,12 @@ impl Tokenize for Transient {
 
         let mut generics = String::new();
 
-        let mut prebuild = String::new();
+        // let mut prebuild = String::new();
         let mut build = String::new();
+        let mut build2 = String::new();
+        let mut build_fields = String::new();
         let mut update = String::new();
         let mut declare = String::new();
-        let mut build2 = String::new();
 
         let mut trigger = String::new();
         let mut trigger_bounds = String::new();
@@ -137,7 +138,7 @@ impl Tokenize for Transient {
 
             let _ = write!(generics, "{typ},");
 
-            field.build(&mut prebuild, &mut build, &mut build2);
+            field.build(&mut build, &mut build2);
             field.update(&mut update);
             field.declare(&mut declare);
             field.trigger(&mut trigger);
@@ -147,6 +148,7 @@ impl Tokenize for Transient {
                 _ => {
                     let _ = write!(product_generics, "{typ},");
                     let _ = write!(product_generics_bounds, "{typ}::Product,");
+                    let _ = write!(build_fields, "{},", field.name);
                     field.declare(&mut product_declare);
                 }
             }
@@ -176,7 +178,8 @@ impl Tokenize for Transient {
                 })
                 .join(",");
 
-            let _ = write!(build, "{el}: {anchor_type}::from({name}({args})),");
+            let _ = write!(build, "let {el} = {anchor_type}::from({name}({args}));");
+            let _ = write!(build_fields, "{el},");
         }
         let anchor = &self.js.functions.last().unwrap().anchor;
 
@@ -238,10 +241,10 @@ impl Tokenize for Transient {
                     type Product = TransientProduct<{product_generics_bounds}>;\
                     \
                     fn build(self) -> Self::Product {{\
-                        {prebuild}\
+                        {build}\
+                        {build2}\
                         TransientProduct {{\
-                            {build}\
-                            {build2}\
+                            {build_fields}\
                         }}
                     }}\
                     \
@@ -503,31 +506,29 @@ impl Field {
         let _ = write!(buf, "{name}: {typ},");
     }
 
-    fn build(&self, pre: &mut String, build: &mut String, build2: &mut String) {
+    fn build(&self, build: &mut String, build2: &mut String) {
         let Field { name, kind, .. } = self;
 
         match kind {
             FieldKind::StaticView => {
                 let _ = write!(
-                    pre,
+                    build,
                     "\
                     let {name} = self.{name}.build();\
                     "
                 );
             }
             FieldKind::View => {
-                let _ = write!(pre, "let {name} = self.{name}.build();");
-                let _ = write!(build2, "{name},");
+                let _ = write!(build, "let {name} = self.{name}.build();");
             }
             FieldKind::Event { .. } => {
-                let _ = write!(pre, "let mut {name} = self.{name}.build();");
-                let _ = write!(build2, "{name},");
+                let _ = write!(build, "let mut {name} = self.{name}.build();");
             }
             FieldKind::Attribute { attr, .. } if attr.abi.is_some() => {
-                let _ = write!(build2, "{name}: self.{name}.build(),");
+                let _ = write!(build2, "let {name} = self.{name}.build();");
             }
             FieldKind::Attribute { el, prop, .. } => {
-                let _ = write!(build2, "{name}: self.{name}.build_in({prop}, &{el}),");
+                let _ = write!(build2, "let {name} = self.{name}.build_in({prop}, &{el});");
             }
         }
     }

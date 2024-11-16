@@ -112,7 +112,7 @@ impl IntoGenerator for HtmlElement {
                             call(
                                 format_args!(
                                     "::kobold::internal::fn_type_hint::<\
-                                    ::kobold::event::{event}<\
+                                    &::kobold::event::{event}<\
                                         ::kobold::reexport::web_sys::{target}\
                                     >,\
                                     _,\
@@ -167,7 +167,7 @@ impl IntoGenerator for HtmlElement {
                         name.ident,
                         format_args!(
                             "impl Fn(\
-                                ::kobold::event::{event}<\
+                                &::kobold::event::{event}<\
                                     ::kobold::reexport::web_sys::{target}\
                                 >\
                             ) + 'static"
