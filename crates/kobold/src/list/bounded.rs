@@ -146,11 +146,15 @@ impl<T, const N: usize> BoundedVec<T, N> {
         self.len
     }
 
-    fn extend<I>(&mut self, iter: I)
+    fn extend<I>(&mut self, mut iter: I)
     where
         I: Iterator<Item = T>,
     {
-        for item in iter {
+        while self.len < N {
+            let Some(item) = iter.next() else {
+                break;
+            };
+
             self.push(item);
         }
     }
