@@ -11,18 +11,18 @@ use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{EventContext, EventId, StateId, Then, Trigger};
+use crate::runtime::{EventContext, EventId, Then, Trigger};
 use crate::{internal, View};
 
 pub struct Signal<S> {
-    _sid: StateId,
+    // _sid: StateId,
     _state: PhantomData<*mut S>,
 }
 
 impl<S> Signal<S> {
     pub(crate) fn new(hook: &Hook<S>) -> Self {
         Signal {
-            _sid: hook.sid,
+            // _sid: hook.sid,
             _state: PhantomData,
         }
     }
@@ -70,7 +70,6 @@ impl<S> Signal<S> {
 
 pub struct Hook<S> {
     inner: S,
-    sid: StateId,
 }
 
 impl<S> Deref for Hook<S> {
@@ -91,12 +90,7 @@ impl<S> Hook<S> {
     pub(crate) fn new(inner: S) -> Self {
         Hook {
             inner,
-            sid: StateId::next(),
         }
-    }
-
-    pub(crate) fn is(&self, sid: StateId) -> bool {
-        self.sid == sid
     }
 
     /// Binds a closure to a mutable reference of the state. While this method is public
@@ -109,7 +103,6 @@ impl<S> Hook<S> {
         O: Into<Then>,
     {
         Bound {
-            sid: self.sid,
             callback,
             _marker: PhantomData,
         }
@@ -164,7 +157,6 @@ where
 
 #[derive(Clone, Copy)]
 pub struct Bound<S, F> {
-    sid: StateId,
     callback: F,
     _marker: PhantomData<S>,
 }
@@ -172,7 +164,6 @@ pub struct Bound<S, F> {
 #[derive(Clone, Copy)]
 pub struct BoundProduct<E, S, F> {
     eid: EventId,
-    sid: StateId,
     callback: F,
     _marker: PhantomData<NonNull<(E, S)>>,
 }
@@ -189,14 +180,12 @@ where
     fn build(self) -> Self::Product {
         BoundProduct {
             eid: EventId::next(),
-            sid: self.sid,
             callback: self.callback,
             _marker: PhantomData,
         }
     }
 
     fn update(self, p: &mut Self::Product) {
-        p.sid = self.sid;
         p.callback = self.callback;
     }
 }
@@ -225,6 +214,6 @@ where
             return None;
         }
 
-        ctx.with(self.sid, &self.callback)
+        ctx.with(&self.callback)
     }
 }

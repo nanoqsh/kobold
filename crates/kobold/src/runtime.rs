@@ -56,7 +56,7 @@ impl From<()> for Then {
 }
 
 thread_local! {
-    static UNIQUE_ID: Cell<u32> = const { Cell::new(0) };
+    static EVENT_ID: Cell<u32> = const { Cell::new(0) };
 
     static INIT: Cell<bool> = const { Cell::new(false) };
 
@@ -65,27 +65,13 @@ thread_local! {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct StateId(pub(crate) u32);
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(transparent)]
 pub struct EventId(pub(crate) u32);
-
-impl StateId {
-    pub(crate) fn next() -> Self {
-        let id = UNIQUE_ID.get();
-
-        UNIQUE_ID.set(id + 1);
-
-        StateId(id)
-    }
-}
 
 impl EventId {
     pub(crate) fn next() -> Self {
-        let id = UNIQUE_ID.get();
+        let id = EVENT_ID.get();
 
-        UNIQUE_ID.set(id + 1);
+        EVENT_ID.set(id + 1);
 
         EventId(id)
     }

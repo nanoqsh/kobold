@@ -5,7 +5,7 @@
 use web_sys::Event;
 
 use crate::event::EventCast;
-use crate::runtime::{EventId, StateId, Then};
+use crate::runtime::{EventId, Then};
 use crate::state::Hook;
 
 pub struct EventCtx<'a, T = ()> {
@@ -29,7 +29,7 @@ pub trait ContextState<'a> {
     where
         Self: 'b;
 
-    fn with_state<S, F>(&mut self, id: StateId, then: F) -> Option<Then>
+    fn with_state<S, F>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         F: Fn(&mut S) -> Then;
@@ -40,7 +40,7 @@ pub trait ContextState<'a> {
 impl ContextState<'_> for () {
     type Borrow<'b> = ();
 
-    fn with_state<S, F>(&mut self, _: StateId, _: F) -> Option<Then>
+    fn with_state<S, F>(&mut self, _: F) -> Option<Then>
     where
         F: Fn(&mut S) -> Then,
     {
@@ -61,7 +61,7 @@ where
     where
         Self: 'b;
 
-    fn with_state<S, F>(&mut self, sid: StateId, then: F) -> Option<Then>
+    fn with_state<S, F>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         F: Fn(&mut S) -> Then,
@@ -73,7 +73,7 @@ where
         //
         // Ideally the first condition will be evaluated at compile time
         // and this whole branch is gone if `T` isn't the same type as `S`.
-        if TypeId::of::<T>() == TypeId::of::<S>() && self.0.is(sid) {
+        if TypeId::of::<T>() == TypeId::of::<S>() {
             // ⚠️ Safety:
             // ==========
             //
@@ -85,7 +85,7 @@ where
             return Some(then(cast_hook));
         }
 
-        self.1.with_state(sid, then)
+        self.1.with_state(then)
     }
 
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b> {
@@ -110,7 +110,7 @@ pub trait EventContext {
         S: 'static,
         Self: 'b;
 
-    fn with<S, E, F, O>(&mut self, id: StateId, then: F) -> Option<Then>
+    fn with<S, E, F, O>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
@@ -150,7 +150,7 @@ where
         }
     }
 
-    fn with<S, E, F, O>(&mut self, id: StateId, then: F) -> Option<Then>
+    fn with<S, E, F, O>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
@@ -160,6 +160,6 @@ where
         let event = E::cast_from(&self.event);
 
         self.states
-            .with_state(id, move |state| then(state, event).into())
+            .with_state(move |state| then(state, event).into())
     }
 }
