@@ -10,9 +10,9 @@ use crate::{internal, Mountable, View};
 
 mod ctx;
 
-use ctx::EventCtx;
+use ctx::{BaseCtx, EventCtx};
 
-pub use ctx::EventContext;
+pub use ctx::{Context, EventContext};
 
 struct RuntimeData<P, U> {
     product: P,
@@ -71,16 +71,6 @@ pub struct StateId(pub(crate) u32);
 #[repr(transparent)]
 pub struct EventId(pub(crate) u32);
 
-impl StateId {
-    pub(crate) fn next() -> Self {
-        let id = UNIQUE_ID.get();
-
-        UNIQUE_ID.set(id + 1);
-
-        StateId(id)
-    }
-}
-
 impl EventId {
     pub(crate) fn next() -> Self {
         let id = UNIQUE_ID.get();
@@ -111,8 +101,8 @@ where
     init_panic_hook();
 
     let runtime = Box::new(RuntimeData {
-        product: render().build(),
-        update: move |p: &mut V::Product| render().update(p),
+        product: render().build(BaseCtx),
+        update: move |p: &mut V::Product| render().update(BaseCtx, p),
     });
 
     internal::append_body(runtime.product.js());

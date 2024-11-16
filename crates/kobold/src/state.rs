@@ -13,7 +13,7 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{Context, EventContext, Then, Trigger};
 use crate::{Mountable, View};
 
 mod hook;
@@ -72,15 +72,15 @@ where
 {
     type Product = StatefulProduct<S::State, V::Product>;
 
-    fn build(self) -> Self::Product {
-        let state = Hook::new(self.state.init());
-        let product = (self.render)(&state).build();
+    fn build<C: Context>(self, _ctx: C) -> Self::Product {
+        let state = Hook::new(self.state.init(), C::sid());
+        let product = (self.render)(&state).build(C::inc());
 
         StatefulProduct { state, product }
     }
 
-    fn update(self, p: &mut Self::Product) {
-        (self.render)(&p.state).update(&mut p.product)
+    fn update<C: Context>(self, _ctx: C, p: &mut Self::Product) {
+        (self.render)(&p.state).update(C::inc(), &mut p.product)
     }
 }
 
@@ -180,14 +180,14 @@ where
 {
     type Product = OnceProduct<S::State, V::Product, D>;
 
-    fn build(self) -> Self::Product {
-        let inner = self.with_state.build();
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        let inner = self.with_state.build(ctx);
         let _no_drop = (self.handler)(Signal::new(&inner.state));
 
         OnceProduct { inner, _no_drop }
     }
 
-    fn update(self, p: &mut Self::Product) {
-        self.with_state.update(&mut p.inner)
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        self.with_state.update(ctx, &mut p.inner)
     }
 }

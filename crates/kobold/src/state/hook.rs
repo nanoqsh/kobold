@@ -11,7 +11,7 @@ use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
 use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{EventContext, EventId, StateId, Then, Trigger};
+use crate::runtime::{Context, EventContext, EventId, StateId, Then, Trigger};
 use crate::{internal, View};
 
 pub struct Signal<S> {
@@ -88,11 +88,8 @@ impl<S> DerefMut for Hook<S> {
 }
 
 impl<S> Hook<S> {
-    pub(crate) fn new(inner: S) -> Self {
-        Hook {
-            inner,
-            sid: StateId::next(),
-        }
+    pub(crate) fn new(inner: S, sid: StateId) -> Self {
+        Hook { inner, sid }
     }
 
     pub(crate) fn is(&self, sid: StateId) -> bool {
@@ -153,12 +150,12 @@ where
 {
     type Product = <&'a V as View>::Product;
 
-    fn build(self) -> Self::Product {
-        (**self).build()
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        (**self).build(ctx)
     }
 
-    fn update(self, p: &mut Self::Product) {
-        (**self).update(p)
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        (**self).update(ctx, p)
     }
 }
 
@@ -196,7 +193,6 @@ where
     }
 
     fn update(self, p: &mut Self::Product) {
-        p.sid = self.sid;
         p.callback = self.callback;
     }
 }

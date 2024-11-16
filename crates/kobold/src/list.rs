@@ -6,6 +6,7 @@
 
 use std::marker::PhantomData;
 
+use crate::runtime::Context;
 use crate::View;
 
 pub mod bounded;
@@ -44,12 +45,12 @@ where
 {
     type Product = ListProduct<<T::Item as View>::Product>;
 
-    fn build(self) -> Self::Product {
-        ListProduct::build(self.0.into_iter())
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        ListProduct::build(ctx, self.0.into_iter())
     }
 
-    fn update(self, p: &mut Self::Product) {
-        p.update(self.0.into_iter());
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        p.update(ctx, self.0.into_iter());
     }
 }
 
@@ -60,24 +61,24 @@ where
 {
     type Product = BoundedProduct<<T::Item as View>::Product, N>;
 
-    fn build(self) -> Self::Product {
-        BoundedProduct::build(self.0.into_iter())
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        BoundedProduct::build(ctx, self.0.into_iter())
     }
 
-    fn update(self, p: &mut Self::Product) {
-        p.update(self.0.into_iter());
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        p.update(ctx, self.0.into_iter());
     }
 }
 
 impl<V: View> View for Vec<V> {
     type Product = ListProduct<V::Product>;
 
-    fn build(self) -> Self::Product {
-        List::new(self).build()
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        List::new(self).build(ctx)
     }
 
-    fn update(self, p: &mut Self::Product) {
-        List::new(self).update(p);
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        List::new(self).update(ctx, p);
     }
 }
 
@@ -87,23 +88,23 @@ where
 {
     type Product = ListProduct<<&'a V as View>::Product>;
 
-    fn build(self) -> Self::Product {
-        List::new(self).build()
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        List::new(self).build(ctx)
     }
 
-    fn update(self, p: &mut Self::Product) {
-        List::new(self).update(p)
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        List::new(self).update(ctx, p)
     }
 }
 
 impl<V: View, const N: usize> View for [V; N] {
     type Product = BoundedProduct<V::Product, N>;
 
-    fn build(self) -> Self::Product {
-        List::new_bounded(self).build()
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        List::new_bounded(self).build(ctx)
     }
 
-    fn update(self, p: &mut Self::Product) {
-        List::new_bounded(self).update(p)
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        List::new_bounded(self).update(ctx, p)
     }
 }

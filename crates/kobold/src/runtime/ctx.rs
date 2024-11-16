@@ -2,11 +2,51 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use std::marker::PhantomData;
+
 use web_sys::Event;
 
 use crate::event::EventCast;
 use crate::runtime::{EventId, StateId, Then};
 use crate::state::Hook;
+
+#[derive(Clone, Copy)]
+pub struct Ctx<D: Context>(PhantomData<D>);
+
+pub trait Context: Copy {
+    type Next: Context;
+
+    fn inc() -> Self::Next;
+
+    fn sid() -> StateId;
+}
+
+#[derive(Clone, Copy)]
+pub struct BaseCtx;
+
+impl Context for BaseCtx {
+    type Next = Ctx<BaseCtx>;
+
+    fn inc() -> Self::Next {
+        Ctx::<BaseCtx>(PhantomData)
+    }
+
+    fn sid() -> StateId {
+        StateId(0)
+    }
+}
+
+impl<D: Context> Context for Ctx<D> {
+    type Next = Ctx<Self>;
+
+    fn inc() -> Self::Next {
+        Ctx::<Self>(PhantomData)
+    }
+
+    fn sid() -> StateId {
+        StateId(D::sid().0 + 1)
+    }
+}
 
 pub struct EventCtx<'a, T = ()> {
     eid: EventId,

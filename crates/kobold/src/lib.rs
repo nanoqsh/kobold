@@ -389,6 +389,7 @@ pub mod prelude {
 }
 
 use dom::Mountable;
+use runtime::Context;
 
 /// Crate re-exports for the [`view!`](view) macro internals
 pub mod reexport {
@@ -403,10 +404,10 @@ pub trait View {
     type Product: Mountable;
 
     /// Build a product that can be mounted in the DOM from this type.
-    fn build(self) -> Self::Product;
+    fn build<C: Context>(self, ctx: C) -> Self::Product;
 
     /// Update the product and apply changes to the DOM if necessary.
-    fn update(self, p: &mut Self::Product);
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product);
 
     /// Once this view is built, do something once.
     fn on_mount<F>(self, handler: F) -> OnMount<Self, F>
@@ -446,16 +447,16 @@ where
 {
     type Product = V::Product;
 
-    fn build(self) -> Self::Product {
-        let prod = self.view.build();
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        let prod = self.view.build(ctx);
 
         (self.handler)(prod.js().unchecked_ref());
 
         prod
     }
 
-    fn update(self, p: &mut Self::Product) {
-        self.view.update(p);
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        self.view.update(ctx, p);
     }
 }
 
@@ -471,16 +472,16 @@ where
 {
     type Product = V::Product;
 
-    fn build(self) -> Self::Product {
-        let prod = self.view.build();
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
+        let prod = self.view.build(ctx);
 
         (self.handler)(prod.js().unchecked_ref());
 
         prod
     }
 
-    fn update(self, p: &mut Self::Product) {
-        self.view.update(p);
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
+        self.view.update(ctx, p);
 
         (self.handler)(p.js().unchecked_ref());
     }

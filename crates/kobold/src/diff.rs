@@ -11,7 +11,7 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{Context, EventContext, Then, Trigger};
 use crate::value::{IntoText, Value};
 use crate::{Mountable, View};
 
@@ -77,16 +77,16 @@ where
 {
     type Product = Fence<D::Memo, V::Product>;
 
-    fn build(self) -> Self::Product {
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
         Fence {
             guard: self.guard.into_memo(),
-            inner: (self.inner)().build(),
+            inner: (self.inner)().build(ctx),
         }
     }
 
-    fn update(self, p: &mut Self::Product) {
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
         if self.guard.diff(&mut p.guard) {
-            (self.inner)().update(&mut p.inner);
+            (self.inner)().update(ctx, &mut p.inner);
         }
     }
 }
@@ -228,11 +228,11 @@ macro_rules! impl_no_diff {
         {
             type Product = Node;
 
-            fn build(self) -> Node {
+            fn build<C: Context>(self, _: C) -> Node {
                 self.into_text()
             }
 
-            fn update(self, node: &mut Node) {
+            fn update<C: Context>(self, _: C, node: &mut Node) {
                 if $update {
                     self.0.set_prop(TextContent, node);
                 }
@@ -280,11 +280,11 @@ macro_rules! impl_no_diff {
         impl View for $name<String> {
             type Product = Node;
 
-            fn build(self) -> Self::Product {
+            fn build<C: Context>(self, _: C) -> Self::Product {
                 self.into_text()
             }
 
-            fn update(self, p: &mut Self::Product) {
+            fn update<C: Context>(self, _: C, p: &mut Self::Product) {
                 if $update {
                     self.0.set_prop(TextContent, p);
                 }

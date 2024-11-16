@@ -100,7 +100,7 @@ use web_sys::Node;
 
 use crate::dom::Anchor;
 use crate::internal::empty_node;
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{Context, EventContext, Then, Trigger};
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -120,22 +120,22 @@ macro_rules! branch {
         {
             type Product = $name<$($var::Product),*>;
 
-            fn build(self) -> Self::Product {
+            fn build<Ctx: Context>(self, ctx: Ctx) -> Self::Product {
                 match self {
                     $(
-                        $name::$var(view) => $name::$var(view.build()),
+                        $name::$var(view) => $name::$var(view.build(ctx)),
                     )*
                 }
             }
 
-            fn update(self, p: &mut Self::Product) {
+            fn update<Ctx: Context>(self, ctx: Ctx, p: &mut Self::Product) {
                 match (self, p) {
                     $(
-                        ($name::$var(view), $name::$var(p)) => view.update(p),
+                        ($name::$var(view), $name::$var(p)) => view.update(ctx, p),
                     )*
 
                     (view, p) => {
-                        let old = replace(p, view.build());
+                        let old = replace(p, view.build(ctx));
 
                         old.replace_with(p.js());
                     }
@@ -220,30 +220,30 @@ impl Trigger for EmptyNode {}
 impl View for Empty {
     type Product = EmptyNode;
 
-    fn build(self) -> EmptyNode {
+    fn build<C: Context>(self, _: C) -> EmptyNode {
         EmptyNode(empty_node())
     }
 
-    fn update(self, _: &mut EmptyNode) {}
+    fn update<C: Context>(self, _: C, _: &mut EmptyNode) {}
 }
 
 impl<T: View> View for Option<T> {
     type Product = Branch2<T::Product, EmptyNode>;
 
-    fn build(self) -> Self::Product {
+    fn build<C: Context>(self, ctx: C) -> Self::Product {
         match self {
-            Some(view) => Branch2::A(view.build()),
+            Some(view) => Branch2::A(view.build(ctx)),
             None => Branch2::B(EmptyNode(empty_node())),
         }
     }
 
-    fn update(self, p: &mut Self::Product) {
+    fn update<C: Context>(self, ctx: C, p: &mut Self::Product) {
         match (self, p) {
-            (Some(view), Branch2::A(p)) => view.update(p),
+            (Some(view), Branch2::A(p)) => view.update(ctx, p),
             (None, Branch2::B(_)) => (),
 
             (view, p) => {
-                let old = replace(p, view.build());
+                let old = replace(p, view.build(ctx));
 
                 old.replace_with(p.js());
             }

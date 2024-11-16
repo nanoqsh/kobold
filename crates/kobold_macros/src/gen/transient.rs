@@ -239,7 +239,7 @@ impl Tokenize for Transient {
                 {{\
                     type Product = TransientProduct<{product_generics_bounds}>;\
                     \
-                    fn build(self) -> Self::Product {{\
+                    fn build<Ctx: ::kobold::runtime::Context>(self, __ctx: Ctx) -> Self::Product {{\
                         {build}\
                         {build2}\
                         TransientProduct {{\
@@ -247,7 +247,7 @@ impl Tokenize for Transient {
                         }}
                     }}\
                     \
-                    fn update(self, p: &mut Self::Product) {{\
+                    fn update<Ctx: ::kobold::runtime::Context>(self, __ctx: Ctx, p: &mut Self::Product) {{\
                         {update}\
                     }}\
                 }}\
@@ -513,12 +513,12 @@ impl Field {
                 let _ = write!(
                     build,
                     "\
-                    let {name} = self.{name}.build();\
+                    let {name} = self.{name}.build(__ctx);\
                     "
                 );
             }
             FieldKind::View => {
-                let _ = write!(build, "let {name} = self.{name}.build();");
+                let _ = write!(build, "let {name} = self.{name}.build(__ctx);");
             }
             FieldKind::Event { .. } => {
                 let _ = write!(build, "let mut {name} = self.{name}.build();");
@@ -551,7 +551,10 @@ impl Field {
 
         match kind {
             FieldKind::StaticView => (),
-            FieldKind::View | FieldKind::Event { .. } => {
+            FieldKind::View => {
+                let _ = write!(buf, "self.{name}.update(__ctx, &mut p.{name});");
+            }
+            FieldKind::Event { .. } => {
                 let _ = write!(buf, "self.{name}.update(&mut p.{name});");
             }
             FieldKind::Attribute { el, prop, .. } => {

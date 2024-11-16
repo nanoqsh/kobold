@@ -7,7 +7,7 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{Context, EventContext, Then, Trigger};
 use crate::{Mountable, View};
 
 pub struct ListProduct<P: Mountable> {
@@ -17,8 +17,9 @@ pub struct ListProduct<P: Mountable> {
 }
 
 impl<P: Mountable> ListProduct<P> {
-    pub fn build<I>(iter: I) -> Self
+    pub fn build<C, I>(ctx: C, iter: I) -> Self
     where
+        C: Context,
         I: Iterator,
         I::Item: View<Product = P>,
     {
@@ -28,12 +29,13 @@ impl<P: Mountable> ListProduct<P> {
             fragment: FragmentBuilder::new(),
         };
 
-        list.extend(iter);
+        list.extend(ctx, iter);
         list
     }
 
-    pub fn update<I>(&mut self, mut iter: I)
+    pub fn update<C, I>(&mut self, ctx: C, mut iter: I)
     where
+        C: Context,
         I: Iterator,
         I::Item: View<Product = P>,
     {
@@ -44,7 +46,7 @@ impl<P: Mountable> ListProduct<P> {
                 break;
             };
 
-            new.update(old);
+            new.update(ctx, old);
             updated += 1;
         }
 
@@ -54,18 +56,19 @@ impl<P: Mountable> ListProduct<P> {
             self.mount(updated);
 
             if updated == self.list.len() {
-                self.extend(iter);
+                self.extend(ctx, iter);
             }
         }
     }
 
-    fn extend<I>(&mut self, iter: I)
+    fn extend<C, I>(&mut self, ctx: C, iter: I)
     where
+        C: Context,
         I: Iterator,
         I::Item: View<Product = P>,
     {
         self.list.extend(iter.map(|view| {
-            let built = view.build();
+            let built = view.build(ctx);
 
             self.fragment.append(built.js());
 

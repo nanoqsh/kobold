@@ -7,6 +7,7 @@
 use wasm_bindgen::prelude::*;
 use web_sys::Node;
 
+use crate::runtime::Context;
 use crate::View;
 
 /// Wrapper that turns `extern` precompiled JavaScript functions into [`View`]s.
@@ -26,11 +27,11 @@ where
 {
     type Product = Node;
 
-    fn build(self) -> Node {
+    fn build<C: Context>(self, _: C) -> Node {
         self.0()
     }
 
-    fn update(self, _: &mut Node) {}
+    fn update<C: Context>(self, _: C, _: &mut Node) {}
 }
 
 #[wasm_bindgen]
