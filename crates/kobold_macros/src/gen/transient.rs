@@ -125,9 +125,12 @@ impl Tokenize for Transient {
         let mut declare = String::new();
         let mut build2 = String::new();
 
+        let mut trigger = String::new();
+        let mut trigger_bounds = String::new();
+
         let mut product_declare = String::new();
         let mut product_generics = String::new();
-        let mut product_generics_binds = String::new();
+        let mut product_generics_bounds = String::new();
 
         for field in self.fields.iter() {
             let typ = field.make_type();
@@ -137,14 +140,19 @@ impl Tokenize for Transient {
             field.build(&mut prebuild, &mut build, &mut build2);
             field.update(&mut update);
             field.declare(&mut declare);
+            field.trigger(&mut trigger);
 
             match field.kind {
                 FieldKind::StaticView => (),
                 _ => {
                     let _ = write!(product_generics, "{typ},");
-                    let _ = write!(product_generics_binds, "{typ}::Product,");
+                    let _ = write!(product_generics_bounds, "{typ}::Product,");
                     field.declare(&mut product_declare);
                 }
+            }
+
+            if let FieldKind::View { .. } | FieldKind::Event { .. } = field.kind {
+                let _ = write!(trigger_bounds, "{typ}: ::kobold::runtime::Trigger,");
             }
         }
 
@@ -191,7 +199,21 @@ impl Tokenize for Transient {
                         {declare_els}\
                     }}\
                     \
-                    impl<{product_generics}> ::kobold::dom::Anchor for TransientProduct<{product_generics}>\
+                    impl<{product_generics}> ::kobold::runtime::Trigger for TransientProduct<{product_generics}> \
+                    where \
+                        {trigger_bounds}\
+                    {{\
+                        fn trigger<Ctx>(&mut self, ctx: &mut Ctx) -> Option<::kobold::runtime::Then> \
+                        where \
+                            Ctx: ::kobold::runtime::EventContext,\
+                        {{\
+                            {trigger}
+                            None\
+                        }}\
+                    \
+                    }}\
+                    \
+                    impl<{product_generics}> ::kobold::dom::Anchor for TransientProduct<{product_generics}> \
                     where \
                         Self: 'static,\
                     ",
@@ -213,7 +235,7 @@ impl Tokenize for Transient {
             format_args!(
                 "\
                 {{\
-                    type Product = TransientProduct<{product_generics_binds}>;\
+                    type Product = TransientProduct<{product_generics_bounds}>;\
                     \
                     fn build(self) -> Self::Product {{\
                         {prebuild}\
@@ -506,6 +528,20 @@ impl Field {
             }
             FieldKind::Attribute { el, prop, .. } => {
                 let _ = write!(build2, "{name}: self.{name}.build_in({prop}, &{el}),");
+            }
+        }
+    }
+
+    fn trigger(&self, buf: &mut String) {
+        let Field { name, kind, .. } = self;
+
+        match kind {
+            FieldKind::StaticView | FieldKind::Attribute { .. } => (),
+            FieldKind::View | FieldKind::Event { .. } => {
+                let _ = write!(
+                    buf,
+                    "if let Some(then) = self.{name}.trigger(ctx) {{ return Some(then) }}"
+                );
             }
         }
     }
