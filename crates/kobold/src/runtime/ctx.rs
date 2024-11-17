@@ -110,7 +110,7 @@ pub trait EventContext {
         S: 'static,
         Self: 'b;
 
-    fn with<S, E, F, O>(&mut self, then: F) -> Option<Then>
+    fn with_state<S, E, F, O>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
@@ -150,7 +150,7 @@ where
         }
     }
 
-    fn with<S, E, F, O>(&mut self, then: F) -> Option<Then>
+    fn with_state<S, E, F, O>(&mut self, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,

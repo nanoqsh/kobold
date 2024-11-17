@@ -88,9 +88,7 @@ impl<S> DerefMut for Hook<S> {
 
 impl<S> Hook<S> {
     pub(crate) fn new(inner: S) -> Self {
-        Hook {
-            inner,
-        }
+        Hook { inner }
     }
 
     /// Binds a closure to a mutable reference of the state. While this method is public
@@ -214,6 +212,6 @@ where
             return None;
         }
 
-        ctx.with(&self.callback)
+        ctx.with_state(&self.callback)
     }
 }
