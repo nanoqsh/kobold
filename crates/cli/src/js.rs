@@ -86,15 +86,8 @@ pub fn transform(source: &str, source_path: &Path) -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let TransformerReturn {
-        errors,
-        symbols,
-        scopes,
-    } = Transformer::new(&allocator, source_path, options).build_with_symbols_and_scopes(
-        symbols,
-        scopes,
-        &mut program,
-    );
+    let TransformerReturn { errors, .. } = Transformer::new(&allocator, source_path, options)
+        .build_with_symbols_and_scopes(symbols, scopes, &mut program);
 
     assert!(errors.is_empty());
 
@@ -120,5 +113,5 @@ pub fn transform(source: &str, source_path: &Path) -> anyhow::Result<()> {
 
     panic!("{code}");
 
-    Ok(())
+    // Ok(())
 }

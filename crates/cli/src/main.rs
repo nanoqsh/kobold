@@ -1,25 +1,43 @@
 use std::fmt::{self, Debug};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use leb128::write::unsigned as leb128_write;
 
-mod manifest;
+#[allow(dead_code, unused_imports)]
 mod js;
+mod manifest;
 
 use manifest::manifest;
 
-/// Simple program to greet a person
-#[derive(Parser, Debug)]
+/// CLI tools for the Kobold framework
+#[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
-    /// JavaScript file produced by wasm-bindgen
-    input: PathBuf,
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
 
-    /// Wasm file if different from `<input_without_extension>_bg.wasm`
-    #[arg(short, long)]
-    wasm: Option<PathBuf>,
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Build a kobold crate
+    #[command(visible_alias = "b")]
+    Build {
+        /// JavaScript file produced by wasm-bindgen
+        input: PathBuf,
+
+        /// Wasm file if different from `<input_without_extension>_bg.wasm`
+        #[arg(short, long)]
+        wasm: Option<PathBuf>,
+    },
+
+    /// Create a new kobold crate in an existing directory
+    Init,
+
+    /// Start a local development server
+    #[command(visible_alias = "s")]
+    Serve,
 }
 
 struct Wasm<'source> {
@@ -151,7 +169,7 @@ impl Debug for Import<'_> {
 }
 
 fn optimize_wasm(file: &Path) -> anyhow::Result<()> {
-    Command::new("wasm-opt")
+    process::Command::new("wasm-opt")
         .arg("-Os")
         .arg(file)
         .arg("-o")
@@ -163,7 +181,7 @@ fn optimize_wasm(file: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() -> anyhow::Result<()> {
+fn build() -> anyhow::Result<()> {
     let manifest = manifest()?;
 
     let mut target = manifest.target.clone();
@@ -179,7 +197,7 @@ fn main() -> anyhow::Result<()> {
 
     let start = std::time::Instant::now();
 
-    Command::new("wasm-bindgen")
+    process::Command::new("wasm-bindgen")
         .arg(&target)
         .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
         .output()?;
@@ -295,5 +313,14 @@ fn symbol(mut n: usize, buf: &mut String) {
         }
 
         n -= 1;
+    }
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Build { .. } => build(),
+        Command::Init => todo!(),
+        Command::Serve => todo!(),
     }
 }
