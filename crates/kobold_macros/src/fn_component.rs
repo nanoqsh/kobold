@@ -156,7 +156,10 @@ fn let_state_syntax(stream: TokenStream) -> TokenStream {
             head.clear();
 
             let body = work(head, stream);
-            let body = call("::kobold::state::stateful", (expr, ", move |", ident, '|', block(body)));
+            let body = call(
+                "::kobold::state::stateful",
+                (expr, ", move |", ident, '|', block(body)),
+            );
 
             return Some(body.tokenize());
         }
@@ -414,12 +417,9 @@ impl Tokenize for FnComponent {
             field_generics.clone(),
             "Props",
             field_generics,
-            block(each(
-                self.arguments
-                    .iter()
-                    .enumerate()
-                    .map(|(i, a)| a.setter(finder.as_mut(), i, &self.arguments).tokenize())
-            )),
+            block(each(self.arguments.iter().enumerate().map(|(i, a)| {
+                a.setter(finder.as_mut(), i, &self.arguments).tokenize()
+            }))),
         ));
 
         // panic!("{mo}");

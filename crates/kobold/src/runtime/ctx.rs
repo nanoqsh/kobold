@@ -68,16 +68,11 @@ where
     {
         use std::any::TypeId;
 
-        // There might be conflicts on the hashes here, but that's okay
-        // as we are going to rely on unique nature of `StateId`.
-        //
-        // Ideally the first condition will be evaluated at compile time
-        // and this whole branch is gone if `T` isn't the same type as `S`.
         if TypeId::of::<T>() == TypeId::of::<S>() {
             // ⚠️ Safety:
             // ==========
             //
-            // Both the `TypeId` check and the invariant nature of `StateId` always
+            // Both the `TypeId` check and the invariant nature of `EventId` always
             // pointing to the same type of a state give us a guarantee that we can
             // cast `&mut Hook<T>` into `&mut Hook<S>` as they are the same type.
             let cast_hook = unsafe { &mut *(self.0 as *mut Hook<T> as *mut Hook<S>) };
@@ -99,9 +94,7 @@ pub trait EventContext {
         S: 'static,
         Self: 'b;
 
-    fn eid(&self) -> EventId;
-
-    fn event<E>(&self) -> &E
+    fn event<E>(&self, eid: EventId) -> Option<&E>
     where
         E: EventCast;
 
@@ -110,7 +103,7 @@ pub trait EventContext {
         S: 'static,
         Self: 'b;
 
-    fn with_state<S, E, F, O>(&mut self, then: F) -> Option<Then>
+    fn with_state<S, E, F, O>(&mut self, eid: EventId, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
@@ -127,15 +120,15 @@ where
         S: 'static,
         Self: 'b;
 
-    fn eid(&self) -> EventId {
-        self.eid
-    }
-
-    fn event<E>(&self) -> &E
+    fn event<E>(&self, eid: EventId) -> Option<&E>
     where
         E: EventCast,
     {
-        E::cast_from(&self.event)
+        if eid == self.eid {
+            Some(E::cast_from(&self.event))
+        } else {
+            None
+        }
     }
 
     fn attach<'b, S>(&'b mut self, hook: &'b mut Hook<S>) -> Self::Attached<'b, S>
@@ -150,13 +143,17 @@ where
         }
     }
 
-    fn with_state<S, E, F, O>(&mut self, then: F) -> Option<Then>
+    fn with_state<S, E, F, O>(&mut self, eid: EventId, then: F) -> Option<Then>
     where
         S: 'static,
         E: EventCast,
         F: Fn(&mut S, &E) -> O,
         O: Into<Then>,
     {
+        if eid != self.eid {
+            return None;
+        }
+
         let event = E::cast_from(&self.event);
 
         self.states

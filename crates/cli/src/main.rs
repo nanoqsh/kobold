@@ -5,8 +5,8 @@ use std::process::Command;
 use clap::Parser;
 use leb128::write::unsigned as leb128_write;
 
-mod manifest;
 mod js;
+mod manifest;
 
 use manifest::manifest;
 

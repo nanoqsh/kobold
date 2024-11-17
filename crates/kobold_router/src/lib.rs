@@ -60,8 +60,10 @@ impl Router {
 
     /// Starts and hosts your web app with a router
     pub fn start(self) {
-        kobold::runtime::start(|| view! {
-           <div id="routerView"></div>
+        kobold::runtime::start(|| {
+            view! {
+               <div id="routerView"></div>
+            }
         });
 
         //This is what decides what is render and triggered by pushState

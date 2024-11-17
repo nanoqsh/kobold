@@ -154,13 +154,11 @@ where
     E: EventCast,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        if ctx.eid() == self.eid {
-            (self.closure)(ctx.event());
+        ctx.event(self.eid).map(|e| {
+            (self.closure)(e);
 
-            Some(Then::Stop)
-        } else {
-            None
-        }
+            Then::Stop
+        })
     }
 }
 

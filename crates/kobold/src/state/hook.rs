@@ -95,7 +95,6 @@ impl<S> Hook<S> {
     /// it's recommended to use the [`bind!`](crate::bind) macro instead.
     pub fn bind<E, F, O>(&self, callback: F) -> Bound<S, F>
     where
-        S: 'static,
         E: EventCast,
         F: Fn(&mut S, &E) -> O + 'static,
         O: Into<Then>,
@@ -208,10 +207,6 @@ where
     O: Into<Then>,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        if ctx.eid() != self.eid {
-            return None;
-        }
-
-        ctx.with_state(&self.callback)
+        ctx.with_state(self.eid, &self.callback)
     }
 }

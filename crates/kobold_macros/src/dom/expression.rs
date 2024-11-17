@@ -101,10 +101,7 @@ impl TryFrom<Group> for Expression {
                 let keyword = Ident::new_raw(keyword, span);
 
                 return Ok(Expression {
-                    stream: call(
-                        ("::kobold::keywords::", keyword, invoke),
-                        stream,
-                    ),
+                    stream: call(("::kobold::keywords::", keyword, invoke), stream),
                     span: group.span(),
                     is_static,
                 });
