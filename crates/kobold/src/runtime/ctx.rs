@@ -24,8 +24,8 @@ impl<'event> EventCtx<'event> {
     }
 }
 
-pub trait ContextState<'a> {
-    type Borrow<'b>: ContextState<'b> + 'b
+pub trait ContextState {
+    type Borrow<'b>: ContextState + 'b
     where
         Self: 'b;
 
@@ -37,7 +37,7 @@ pub trait ContextState<'a> {
     fn borrow<'b>(&'b mut self) -> Self::Borrow<'b>;
 }
 
-impl ContextState<'_> for () {
+impl ContextState for () {
     type Borrow<'b> = ();
 
     fn with_state<S, F>(&mut self, _: F) -> Option<Then>
@@ -52,10 +52,10 @@ impl ContextState<'_> for () {
     }
 }
 
-impl<'a, T, U> ContextState<'a> for (&'a mut Hook<T>, U)
+impl<'a, T, U> ContextState for (&'a mut Hook<T>, U)
 where
     T: 'static,
-    U: ContextState<'a>,
+    U: ContextState,
 {
     type Borrow<'b> = (&'b mut Hook<T>, U::Borrow<'b>)
     where
@@ -113,7 +113,7 @@ pub trait EventContext {
 
 impl<'a, T> EventContext for EventCtx<'a, T>
 where
-    T: ContextState<'a>,
+    T: ContextState,
 {
     type Attached<'b, S> = EventCtx<'b, (&'b mut Hook<S>, T::Borrow<'b>)>
     where
