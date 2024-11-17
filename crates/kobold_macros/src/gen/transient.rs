@@ -145,6 +145,10 @@ impl Tokenize for Transient {
 
             match field.kind {
                 FieldKind::StaticView => (),
+                FieldKind::Event { .. } => {
+                    let _ = write!(build_fields, "{},", field.name);
+                    let _ = write!(product_declare, "{}: ::kobold::runtime::EventId,", field.name);
+                },
                 _ => {
                     let _ = write!(product_generics, "{typ},");
                     let _ = write!(product_generics_bounds, "{typ}::Product,");
@@ -547,8 +551,8 @@ impl Field {
         let Field { name, kind, .. } = self;
 
         match kind {
-            FieldKind::StaticView => (),
-            FieldKind::View | FieldKind::Event { .. } => {
+            FieldKind::StaticView | FieldKind::Event { .. } => (),
+            FieldKind::View => {
                 let _ = write!(buf, "self.{name}.update(&mut p.{name});");
             }
             FieldKind::Attribute { el, prop, .. } => {
