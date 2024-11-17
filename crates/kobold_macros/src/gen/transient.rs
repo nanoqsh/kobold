@@ -201,20 +201,6 @@ impl Tokenize for Transient {
                         {declare_els}\
                     }}\
                     \
-                    impl<{product_generics}> ::kobold::runtime::Trigger for TransientProduct<{product_generics}> \
-                    where \
-                        {trigger_bounds}\
-                    {{\
-                        fn trigger<Ctx>(&mut self, ctx: &mut Ctx) -> Option<::kobold::runtime::Then> \
-                        where \
-                            Ctx: ::kobold::runtime::EventContext,\
-                        {{\
-                            {trigger}
-                            None\
-                        }}\
-                    \
-                    }}\
-                    \
                     impl<{product_generics}> ::kobold::dom::Anchor for TransientProduct<{product_generics}> \
                     where \
                         Self: 'static,\
@@ -245,6 +231,11 @@ impl Tokenize for Transient {
                         TransientProduct {{\
                             {build_fields}\
                         }}
+                    }}\
+                    \
+                    fn trigger(self, ctx: &::kobold::runtime::EventContext, p: &Self::Product) -> Option<::kobold::runtime::Then> {{\
+                        {trigger}
+                        None
                     }}\
                     \
                     fn update(self, p: &mut Self::Product) {{\
@@ -537,10 +528,16 @@ impl Field {
 
         match kind {
             FieldKind::StaticView | FieldKind::Attribute { .. } => (),
-            FieldKind::View | FieldKind::Event { .. } => {
+            FieldKind::View => {
                 let _ = write!(
                     buf,
-                    "if let Some(then) = self.{name}.trigger(ctx) {{ return Some(then) }}"
+                    "if let Some(then) = self.{name}.trigger(ctx, &p.{name}) {{ return Some(then) }}"
+                );
+            }
+            FieldKind::Event { .. } => {
+                let _ = write!(
+                    buf,
+                    "if let Some(then) = self.{name}.trigger(ctx, p.{name}) {{ return Some(then) }}"
                 );
             }
         }
