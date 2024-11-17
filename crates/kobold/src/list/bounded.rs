@@ -112,7 +112,11 @@ where
     P: Mountable,
 {
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        self.list.iter_mut().find_map(|p| p.trigger(ctx))
+        debug_assert!(self.list.get(..self.mounted).is_some());
+
+        let list = unsafe { self.list.get_unchecked_mut(..self.mounted) };
+
+        list.iter_mut().find_map(|p| p.trigger(ctx))
     }
 }
 

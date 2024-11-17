@@ -113,7 +113,9 @@ where
     fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
         debug_assert!(self.list.get(..self.mounted).is_some());
 
-        for p in unsafe { self.list.get_unchecked_mut(..self.mounted).iter_mut() } {
+        let list = unsafe { self.list.get_unchecked_mut(..self.mounted) };
+
+        for p in list.iter_mut() {
             if let Some(then) = p.trigger(ctx) {
                 return Some(then);
             }
