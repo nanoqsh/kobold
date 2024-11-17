@@ -11,7 +11,7 @@ use web_sys::Node;
 
 use crate::attribute::Attribute;
 use crate::dom::{Anchor, TextContent};
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{EventContext, Then};
 use crate::value::{IntoText, Value};
 use crate::{Mountable, View};
 
@@ -84,6 +84,10 @@ where
         }
     }
 
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        (self.inner)().trigger(ctx, &p.inner)
+    }
+
     fn update(self, p: &mut Self::Product) {
         if self.guard.diff(&mut p.guard) {
             (self.inner)().update(&mut p.inner);
@@ -100,15 +104,6 @@ where
 
     fn anchor(&self) -> &P {
         &self.inner
-    }
-}
-
-impl<D, P> Trigger for Fence<D, P>
-where
-    P: Trigger,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        self.inner.trigger(ctx)
     }
 }
 

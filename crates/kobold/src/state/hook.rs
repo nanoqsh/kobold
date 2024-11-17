@@ -3,16 +3,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // use std::future::Future;
+use std::cell::UnsafeCell;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::ptr::NonNull;
+use std::ops::Deref;
 
-use wasm_bindgen::JsValue;
 // use wasm_bindgen_futures::spawn_local;
 
-use crate::event::{EventCast, Listener, ListenerHandle};
-use crate::runtime::{EventContext, EventId, Then, Trigger};
-use crate::{internal, View};
+use crate::event::{EventCast, Listener};
+use crate::runtime::{EventContext, EventId, Then};
+use crate::View;
 
 pub struct Signal<S> {
     // _sid: StateId,
@@ -69,31 +68,27 @@ impl<S> Signal<S> {
 }
 
 pub struct Hook<S> {
-    inner: S,
+    inner: UnsafeCell<S>,
 }
 
 impl<S> Deref for Hook<S> {
     type Target = S;
 
     fn deref(&self) -> &S {
-        &self.inner
-    }
-}
-
-impl<S> DerefMut for Hook<S> {
-    fn deref_mut(&mut self) -> &mut S {
-        &mut self.inner
+        unsafe { &*self.inner.get() }
     }
 }
 
 impl<S> Hook<S> {
     pub(crate) fn new(inner: S) -> Self {
-        Hook { inner }
+        Hook {
+            inner: UnsafeCell::new(inner),
+        }
     }
 
     /// Binds a closure to a mutable reference of the state. While this method is public
     /// it's recommended to use the [`bind!`](crate::bind) macro instead.
-    pub fn bind<E, F, O>(&self, callback: F) -> Bound<S, F>
+    pub fn bind<E, F, O>(&self, callback: F) -> Bound<'_, S, F>
     where
         S: 'static,
         E: EventCast,
@@ -102,6 +97,7 @@ impl<S> Hook<S> {
     {
         Bound {
             callback,
+            hook: self,
             _marker: PhantomData,
         }
     }
@@ -154,64 +150,22 @@ where
 }
 
 #[derive(Clone, Copy)]
-pub struct Bound<S, F> {
+pub struct Bound<'a, S, F> {
     callback: F,
+    hook: &'a Hook<S>,
     _marker: PhantomData<S>,
 }
 
-#[derive(Clone, Copy)]
-pub struct BoundProduct<E, S, F> {
-    eid: EventId,
-    callback: F,
-    _marker: PhantomData<NonNull<(E, S)>>,
-}
-
-impl<E, S, F, O> Listener<E> for Bound<S, F>
+impl<E, S, F, O> Listener<E> for Bound<'_, S, F>
 where
     S: 'static,
     E: EventCast,
     F: Fn(&mut S, &E) -> O + 'static,
     O: Into<Then>,
 {
-    type Product = BoundProduct<E, S, F>;
-
-    fn build(self) -> Self::Product {
-        BoundProduct {
-            eid: EventId::next(),
-            callback: self.callback,
-            _marker: PhantomData,
-        }
-    }
-
-    fn update(self, p: &mut Self::Product) {
-        p.callback = self.callback;
-    }
-}
-
-impl<E, S, F, O> ListenerHandle for BoundProduct<E, S, F>
-where
-    S: 'static,
-    E: EventCast,
-    F: Fn(&mut S, &E) -> O + 'static,
-    O: Into<Then>,
-{
-    fn js_value(&mut self) -> JsValue {
-        internal::make_event_handler(self.eid.0)
-    }
-}
-
-impl<E, S, F, O> Trigger for BoundProduct<E, S, F>
-where
-    S: 'static,
-    E: EventCast,
-    F: Fn(&mut S, &E) -> O + 'static,
-    O: Into<Then>,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        if ctx.eid() != self.eid {
-            return None;
-        }
-
-        ctx.with_state(&self.callback)
+    fn trigger(self, ctx: &EventContext, eid: EventId) -> Option<Then> {
+        ctx.get(eid).map(|e| {
+            (self.callback)(unsafe { &mut *self.hook.inner.get() }, E::cast_from(e)).into()
+        })
     }
 }

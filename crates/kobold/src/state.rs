@@ -13,7 +13,7 @@
 //!
 use wasm_bindgen::JsValue;
 
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{EventContext, Then};
 use crate::{Mountable, View};
 
 mod hook;
@@ -79,6 +79,10 @@ where
         StatefulProduct { state, product }
     }
 
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        (self.render)(&p.state).trigger(ctx, &p.product)
+    }
+
     fn update(self, p: &mut Self::Product) {
         (self.render)(&p.state).update(&mut p.product)
     }
@@ -101,18 +105,6 @@ where
 
     fn replace_with(&self, new: &JsValue) {
         self.product.replace_with(new);
-    }
-}
-
-impl<S, P> Trigger for StatefulProduct<S, P>
-where
-    S: 'static,
-    P: Trigger,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        let mut ctx = ctx.attach(&mut self.state);
-
-        self.product.trigger(&mut ctx)
     }
 }
 
@@ -161,15 +153,6 @@ where
     }
 }
 
-impl<S, P, D> Trigger for OnceProduct<S, P, D>
-where
-    StatefulProduct<S, P>: Trigger,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        self.inner.trigger(ctx)
-    }
-}
-
 impl<S, R, F, V, D> View for Once<S, R, F>
 where
     S: IntoState,
@@ -185,6 +168,10 @@ where
         let _no_drop = (self.handler)(Signal::new(&inner.state));
 
         OnceProduct { inner, _no_drop }
+    }
+
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        self.with_state.trigger(ctx, &p.inner)
     }
 
     fn update(self, p: &mut Self::Product) {

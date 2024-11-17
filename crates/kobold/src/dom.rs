@@ -10,10 +10,9 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::Node;
 
 use crate::internal;
-use crate::runtime::Trigger;
 
 /// A type that can be mounted in the DOM
-pub trait Mountable: Trigger + 'static {
+pub trait Mountable: 'static {
     /// The concrete `web-sys` type representing the root of this
     /// product, most often [`HtmlElement`](web_sys::HtmlElement).
     type Js: JsCast;
@@ -39,7 +38,7 @@ pub trait Anchor {
 
 impl<T> Mountable for T
 where
-    T: Anchor + Trigger + 'static,
+    T: Anchor + 'static,
     T::Target: Mountable,
 {
     type Js = T::Js;
@@ -162,6 +161,3 @@ impl Mountable for Fragment {
         internal::fragment_replace(&self.0, new)
     }
 }
-
-impl Trigger for Node {}
-impl Trigger for Fragment {}

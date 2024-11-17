@@ -349,6 +349,7 @@ pub use kobold_macros::component;
 /// Macro for creating transient [`View`] types. See the [main documentation](crate) for details.
 pub use kobold_macros::{class, view};
 
+use runtime::{EventContext, Then};
 use wasm_bindgen::JsCast;
 
 #[cfg(all(
@@ -397,13 +398,17 @@ pub mod reexport {
 }
 
 /// Trait that describes types that can be rendered in the DOM.
-pub trait View {
+pub trait View: Sized {
     /// The product should contain a DOM reference to this View and
     /// any data it needs to update itself.
     type Product: Mountable;
 
     /// Build a product that can be mounted in the DOM from this type.
     fn build(self) -> Self::Product;
+
+    fn trigger(self, _ctx: &EventContext, _p: &Self::Product) -> Option<Then> {
+        None
+    }
 
     /// Update the product and apply changes to the DOM if necessary.
     fn update(self, p: &mut Self::Product);

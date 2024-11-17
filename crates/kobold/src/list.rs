@@ -6,6 +6,7 @@
 
 use std::marker::PhantomData;
 
+use crate::runtime::{EventContext, Then};
 use crate::View;
 
 pub mod bounded;
@@ -48,6 +49,10 @@ where
         ListProduct::build(self.0.into_iter())
     }
 
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        p.trigger(ctx, self.0.into_iter())
+    }
+
     fn update(self, p: &mut Self::Product) {
         p.update(self.0.into_iter());
     }
@@ -64,6 +69,10 @@ where
         BoundedProduct::build(self.0.into_iter())
     }
 
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        p.trigger(ctx, self.0.into_iter())
+    }
+
     fn update(self, p: &mut Self::Product) {
         p.update(self.0.into_iter());
     }
@@ -74,6 +83,10 @@ impl<V: View> View for Vec<V> {
 
     fn build(self) -> Self::Product {
         List::new(self).build()
+    }
+
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        List::new(self).trigger(ctx, p)
     }
 
     fn update(self, p: &mut Self::Product) {
@@ -91,6 +104,10 @@ where
         List::new(self).build()
     }
 
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        List::new(self).trigger(ctx, p)
+    }
+
     fn update(self, p: &mut Self::Product) {
         List::new(self).update(p)
     }
@@ -101,6 +118,10 @@ impl<V: View, const N: usize> View for [V; N] {
 
     fn build(self) -> Self::Product {
         List::new_bounded(self).build()
+    }
+
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        List::new_bounded(self).trigger(ctx, p)
     }
 
     fn update(self, p: &mut Self::Product) {

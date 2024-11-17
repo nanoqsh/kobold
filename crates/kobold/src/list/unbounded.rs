@@ -7,7 +7,7 @@
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{EventContext, Then};
 use crate::{Mountable, View};
 
 pub struct ListProduct<P: Mountable> {
@@ -59,6 +59,22 @@ impl<P: Mountable> ListProduct<P> {
         }
     }
 
+    pub fn trigger<I>(&self, ctx: &EventContext, iter: I) -> Option<Then>
+    where
+        I: Iterator,
+        I::Item: View<Product = P>,
+    {
+        let list = unsafe { self.list.get_unchecked(..self.mounted) };
+
+        for (view, p) in iter.zip(list) {
+            if let Some(then) = view.trigger(ctx, p) {
+                return Some(then);
+            }
+        }
+
+        None
+    }
+
     fn extend<I>(&mut self, iter: I)
     where
         I: Iterator,
@@ -103,22 +119,5 @@ where
 
     fn anchor(&self) -> &Fragment {
         &self.fragment
-    }
-}
-
-impl<P> Trigger for ListProduct<P>
-where
-    P: Mountable,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        debug_assert!(self.list.get(..self.mounted).is_some());
-
-        for p in unsafe { self.list.get_unchecked_mut(..self.mounted).iter_mut() } {
-            if let Some(then) = p.trigger(ctx) {
-                return Some(then);
-            }
-        }
-
-        None
     }
 }

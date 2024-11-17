@@ -7,7 +7,6 @@ use web_sys::Node;
 use crate::diff::{Diff, Ver};
 use crate::dom::{Anchor, Property, TextContent};
 use crate::internal;
-use crate::runtime::Trigger;
 use crate::View;
 
 /// Value that can be set as a property on DOM node
@@ -72,8 +71,6 @@ impl<M> Anchor for TextProduct<M> {
         &self.node
     }
 }
-
-impl<M> Trigger for TextProduct<M> {}
 
 impl View for String {
     type Product = TextProduct<String>;

@@ -100,7 +100,7 @@ use web_sys::Node;
 
 use crate::dom::Anchor;
 use crate::internal::empty_node;
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{EventContext, Then};
 use crate::{Mountable, View};
 
 macro_rules! branch {
@@ -125,6 +125,15 @@ macro_rules! branch {
                     $(
                         $name::$var(view) => $name::$var(view.build()),
                     )*
+                }
+            }
+
+            fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+                match (self, p) {
+                    $(
+                        ($name::$var(view), $name::$var(p)) => view.trigger(ctx, p),
+                    )*
+                    _ => None,
                 }
             }
 
@@ -175,21 +184,6 @@ macro_rules! branch {
                 }
             }
         }
-
-        impl<$($var),*> Trigger for $name<$($var),*>
-        where
-            $(
-                $var: Trigger,
-            )*
-        {
-            fn trigger<Ctx: EventContext>(&mut self, ctx: &mut Ctx) -> Option<Then> {
-                match self {
-                    $(
-                        $name::$var(p) => p.trigger(ctx),
-                    )*
-                }
-            }
-        }
     };
 }
 
@@ -215,8 +209,6 @@ impl Anchor for EmptyNode {
     }
 }
 
-impl Trigger for EmptyNode {}
-
 impl View for Empty {
     type Product = EmptyNode;
 
@@ -234,6 +226,13 @@ impl<T: View> View for Option<T> {
         match self {
             Some(view) => Branch2::A(view.build()),
             None => Branch2::B(EmptyNode(empty_node())),
+        }
+    }
+
+    fn trigger(self, ctx: &EventContext, p: &Self::Product) -> Option<Then> {
+        match (self, p) {
+            (Some(view), Branch2::A(p)) => view.trigger(ctx, p),
+            _ => None,
         }
     }
 

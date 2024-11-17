@@ -12,7 +12,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{HtmlElement, HtmlInputElement};
 
 use crate::internal;
-use crate::runtime::{EventContext, EventId, Then, Trigger};
+use crate::runtime::{EventContext, EventId, Then};
 
 #[wasm_bindgen]
 extern "C" {
@@ -99,13 +99,13 @@ event! {
 pub trait Listener<E>
 where
     E: EventCast,
-    Self: Sized + 'static,
+    Self: Sized,
 {
-    type Product: ListenerHandle;
+    fn build(self) -> EventId {
+        EventId::next()
+    }
 
-    fn build(self) -> Self::Product;
-
-    fn update(self, p: &mut Self::Product);
+    fn trigger(self, ctx: &EventContext, eid: EventId) -> Option<Then>;
 }
 
 impl<E, F> Listener<E> for F
@@ -113,54 +113,21 @@ where
     F: Fn(&E) + 'static,
     E: EventCast,
 {
-    type Product = ListenerProduct<Self, E>;
-
-    fn build(self) -> Self::Product {
-        ListenerProduct {
-            closure: self,
-            eid: EventId::next(),
-            _event: PhantomData,
-        }
-    }
-
-    fn update(self, p: &mut ListenerProduct<Self, E>) {
-        p.closure = self;
+    fn trigger(self, ctx: &EventContext, eid: EventId) -> Option<Then> {
+        ctx.get(eid).map(move |e| {
+            self(E::cast_from(e));
+            Then::Stop
+        })
     }
 }
 
-pub struct ListenerProduct<F, E> {
-    closure: F,
-    eid: EventId,
-    _event: PhantomData<E>,
-}
-
-pub trait ListenerHandle: Trigger {
+pub trait ListenerHandle {
     fn js_value(&mut self) -> JsValue;
 }
 
-impl<F, E> ListenerHandle for ListenerProduct<F, E>
-where
-    F: Fn(&E) + 'static,
-    E: EventCast,
-{
+impl ListenerHandle for EventId {
     fn js_value(&mut self) -> JsValue {
-        internal::make_event_handler(self.eid.0)
-    }
-}
-
-impl<F, E> Trigger for ListenerProduct<F, E>
-where
-    F: Fn(&E) + 'static,
-    E: EventCast,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        if ctx.eid() == self.eid {
-            (self.closure)(ctx.event());
-
-            Some(Then::Stop)
-        } else {
-            None
-        }
+        internal::make_event_handler(self.0)
     }
 }
 

@@ -8,31 +8,47 @@ use web_sys::Event;
 
 use crate::{internal, Mountable, View};
 
-mod ctx;
+// mod ctx;
 
-use ctx::EventCtx;
+// use ctx::EventCtx;
 
-pub use ctx::EventContext;
+// pub use ctx::EventContext;
 
-struct RuntimeData<P, U> {
+pub struct EventContext {
+    eid: EventId,
+    event: Event,
+}
+
+impl EventContext {
+    pub(crate) fn get(&self, eid: EventId) -> Option<&Event> {
+        if self.eid == eid {
+            Some(&self.event)
+        } else {
+            None
+        }
+    }
+}
+
+struct RuntimeData<P, T, U> {
     product: P,
+    trigger: T,
     update: U,
 }
 
 trait Runtime {
-    fn update(&mut self, ctx: Option<&mut EventCtx>);
+    fn update(&mut self, ctx: Option<&EventContext>);
 }
 
-impl<P, U> Runtime for RuntimeData<P, U>
+impl<P, T, U> Runtime for RuntimeData<P, T, U>
 where
-    P: Trigger,
+    T: Fn(&EventContext, &P) -> Option<Then>,
     U: Fn(&mut P),
 {
-    fn update(&mut self, ctx: Option<&mut EventCtx>) {
+    fn update(&mut self, ctx: Option<&EventContext>) {
         let p = &mut self.product;
 
         if let Some(ctx) = ctx {
-            if let Some(Then::Stop) = p.trigger(ctx) {
+            if let Some(Then::Stop) = (self.trigger)(ctx, p) {
                 return;
             }
         }
@@ -77,16 +93,16 @@ impl EventId {
     }
 }
 
-pub trait Trigger {
-    fn trigger<C: EventContext>(&mut self, _: &mut C) -> Option<Then> {
-        None
-    }
-}
+// pub trait Trigger {
+//     fn trigger<C: EventContext>(&mut self, _: &mut C) -> Option<Then> {
+//         None
+//     }
+// }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
 pub fn start<F, V>(render: F)
 where
-    F: Fn() -> V + 'static,
+    F: Fn() -> V + Copy + 'static,
     V: View,
 {
     if INIT.get() {
@@ -98,6 +114,7 @@ where
 
     let runtime = Box::new(RuntimeData {
         product: render().build(),
+        trigger: move |c: &EventContext, p: &V::Product| render().trigger(c, p),
         update: move |p: &mut V::Product| render().update(p),
     });
 
@@ -108,7 +125,7 @@ where
 
 pub(crate) fn trigger(eid: EventId, event: Event) {
     if let Some(runtime) = RUNTIME.take() {
-        let mut ctx = EventCtx::new(eid, &event);
+        let mut ctx = EventContext { eid, event };
 
         runtime.update(Some(&mut ctx));
 

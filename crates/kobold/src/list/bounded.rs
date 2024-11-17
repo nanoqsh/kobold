@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 use web_sys::Node;
 
 use crate::dom::{Anchor, Fragment, FragmentBuilder};
-use crate::runtime::{EventContext, Then, Trigger};
+use crate::runtime::{EventContext, Then};
 use crate::{Mountable, View};
 
 pub struct BoundedProduct<P: Mountable, const N: usize> {
@@ -60,6 +60,22 @@ impl<P: Mountable, const N: usize> BoundedProduct<P, N> {
         }
     }
 
+    pub fn trigger<I>(&self, ctx: &EventContext, iter: I) -> Option<Then>
+    where
+        I: Iterator,
+        I::Item: View<Product = P>,
+    {
+        let list = unsafe { self.list.get_unchecked(..self.mounted) };
+
+        for (view, p) in iter.zip(list) {
+            if let Some(then) = view.trigger(ctx, p) {
+                return Some(then);
+            }
+        }
+
+        None
+    }
+
     fn extend<I>(&mut self, iter: I)
     where
         I: Iterator,
@@ -104,15 +120,6 @@ where
 
     fn anchor(&self) -> &Fragment {
         &self.fragment
-    }
-}
-
-impl<P, const N: usize> Trigger for BoundedProduct<P, N>
-where
-    P: Mountable,
-{
-    fn trigger<C: EventContext>(&mut self, ctx: &mut C) -> Option<Then> {
-        self.list.iter_mut().find_map(|p| p.trigger(ctx))
     }
 }
 
