@@ -8,12 +8,6 @@ use web_sys::Event;
 
 use crate::{internal, Mountable, View};
 
-// mod ctx;
-
-// use ctx::EventCtx;
-
-// pub use ctx::EventContext;
-
 pub struct EventContext {
     eid: EventId,
     event: Event,
@@ -92,12 +86,6 @@ impl EventId {
         EventId(id)
     }
 }
-
-// pub trait Trigger {
-//     fn trigger<C: EventContext>(&mut self, _: &mut C) -> Option<Then> {
-//         None
-//     }
-// }
 
 /// Start the Kobold app by mounting given [`View`] in the document `body`.
 pub fn start<F, V>(render: F)

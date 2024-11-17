@@ -92,7 +92,7 @@ impl<S> Hook<S> {
     where
         S: 'static,
         E: EventCast,
-        F: Fn(&mut S, &E) -> O + 'static,
+        F: FnOnce(&mut S, &E) -> O + 'static,
         O: Into<Then>,
     {
         Bound {
@@ -160,7 +160,7 @@ impl<E, S, F, O> Listener<E> for Bound<'_, S, F>
 where
     S: 'static,
     E: EventCast,
-    F: Fn(&mut S, &E) -> O + 'static,
+    F: FnOnce(&mut S, &E) -> O + 'static,
     O: Into<Then>,
 {
     fn trigger(self, ctx: &EventContext, eid: EventId) -> Option<Then> {

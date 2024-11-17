@@ -110,7 +110,7 @@ where
 
 impl<E, F> Listener<E> for F
 where
-    F: Fn(&E) + 'static,
+    F: FnOnce(&E) + 'static,
     E: EventCast,
 {
     fn trigger(self, ctx: &EventContext, eid: EventId) -> Option<Then> {
