@@ -14,6 +14,17 @@ pub struct Report<
 }
 
 impl<E> Report<E> {
+    pub fn new<U, M>(err: U, message: M) -> Self
+    where
+        U: Into<E>,
+        M: Into<String>,
+    {
+        Self {
+            err: Some(err.into()),
+            message: message.into(),
+        }
+    }
+
     pub fn message<M>(message: M) -> Self
     where
         M: Into<String>,
@@ -53,10 +64,7 @@ where
     where
         M: Into<String>,
     {
-        self.map_err(|err| Report {
-            err: Some(err.into()),
-            message: message.into(),
-        })
+        self.map_err(|err| Report::new(err, message))
     }
 }
 

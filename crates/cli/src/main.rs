@@ -1,12 +1,14 @@
-use std::env;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
+use std::{env, path::PathBuf};
 
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::build::build;
+use crate::init::{init, Init};
 
 mod build;
+mod init;
 #[allow(dead_code, unused_imports)]
 mod js;
 mod log;
@@ -35,8 +37,15 @@ enum Command {
     #[command(visible_alias = "b")]
     Build,
 
-    /// Create a new kobold crate in an existing directory
-    Init,
+    /// Create a new kobold crate
+    Init {
+        /// Package directory, defaults to the current directory
+        path: Option<PathBuf>,
+
+        /// Set the resulting package name, defaults to the directory name
+        #[arg(long)]
+        name: Option<String>,
+    },
 
     /// Start a local development server
     #[command(visible_alias = "s")]
@@ -69,7 +78,7 @@ fn main() -> ExitCode {
 
     let res = match cli.command {
         Command::Build => build(),
-        Command::Init => todo!(),
+        Command::Init { path, name } => init(Init { path, name }),
         Command::Serve => todo!(),
     };
 

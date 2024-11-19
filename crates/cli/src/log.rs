@@ -35,7 +35,7 @@ pub use error;
 #[macro_export]
 macro_rules! optimized {
     ($($arg:tt)*) => {
-        eprintln!("{} {}", $crate::log::Title::OPTI, format_args!($($arg)*));
+        eprintln!("{} {}", $crate::log::Title("   Optimized"), format_args!($($arg)*));
     };
 }
 
@@ -44,17 +44,26 @@ pub use optimized;
 #[macro_export]
 macro_rules! reduced {
     ($($arg:tt)*) => {
-        eprintln!("{} {}", $crate::log::Title::REDU, format_args!($($arg)*));
+        eprintln!("{} {}", $crate::log::Title("     Reduced"), format_args!($($arg)*));
     };
 }
 
 pub use reduced;
 
 #[macro_export]
+macro_rules! creating {
+    ($($arg:tt)*) => {
+        eprintln!("{} {}", $crate::log::Title("    Creating"), format_args!($($arg)*));
+    };
+}
+
+pub use creating;
+
+#[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
         if $crate::log::is_verbose_output_enabled() {
-            eprintln!("{} {}", $crate::log::Title::INFO, format_args!($($arg)*));
+            eprintln!("{} {}", $crate::log::Title("        Info"), format_args!($($arg)*));
         }
     };
 }
@@ -74,13 +83,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub struct Title(&'static str);
-
-impl Title {
-    pub const OPTI: Self = Self("   Optimized");
-    pub const INFO: Self = Self("        Info");
-    pub const REDU: Self = Self("     Reduced");
-}
+pub struct Title(pub &'static str);
 
 impl fmt::Display for Title {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
