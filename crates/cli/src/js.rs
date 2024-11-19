@@ -71,7 +71,7 @@ pub fn transform(source: &str, source_path: &Path) -> anyhow::Result<()> {
         errors,
         panicked,
         ..
-    } = Parser::new(&allocator, &source, SourceType::cjs()).parse();
+    } = Parser::new(&allocator, source, SourceType::cjs()).parse();
 
     assert!(!panicked);
     assert!(errors.is_empty());
