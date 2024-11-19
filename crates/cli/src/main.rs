@@ -1,3 +1,4 @@
+use std::env;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 
@@ -57,10 +58,13 @@ fn main() -> ExitCode {
         log::enable_verbose_output();
     }
 
-    match cli.color {
-        When::Auto if io::stdout().is_terminal() => log::enable_color_output(),
-        When::Always => log::enable_color_output(),
-        _ => {}
+    let color_allowed = env::var("NO_COLOR").map_or(true, |v| v.is_empty());
+    if color_allowed {
+        match cli.color {
+            When::Auto if io::stdout().is_terminal() => log::enable_color_output(),
+            When::Always => log::enable_color_output(),
+            _ => {}
+        }
     }
 
     let res = match cli.command {
