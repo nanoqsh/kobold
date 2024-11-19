@@ -7,6 +7,7 @@ use crate::build::build;
 mod build;
 #[allow(dead_code, unused_imports)]
 mod js;
+mod log;
 mod manifest;
 mod report;
 
@@ -16,6 +17,10 @@ mod report;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Use verbose output
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -34,6 +39,11 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+
+    if cli.verbose {
+        log::enable_verbose_output();
+    }
+
     let res = match cli.command {
         Command::Build => build(),
         Command::Init => todo!(),
@@ -43,7 +53,7 @@ fn main() -> ExitCode {
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("error: {err}");
+            log::error!("{err}");
             ExitCode::FAILURE
         }
     }

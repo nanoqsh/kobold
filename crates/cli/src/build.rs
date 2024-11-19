@@ -1,9 +1,10 @@
 use std::fmt::{self, Debug};
-use std::path::Path;
+use std::path::{absolute, Path};
 use std::process::Command;
 
 use leb128::write::unsigned as leb128_write;
 
+use crate::log;
 use crate::manifest::manifest;
 use crate::report::DisplayError;
 
@@ -35,7 +36,9 @@ pub fn build() -> anyhow::Result<()> {
 
     optimize_wasm(&wasm)?;
 
-    println!("Optimized Wasm in {:?}", start.elapsed());
+    let elapsed = start.elapsed();
+    let wasm_path = absolute(&wasm)?;
+    log::optimized!("wasm `{}` in {elapsed:.2?}", wasm_path.display());
 
     // return Ok(());
 
@@ -95,7 +98,7 @@ pub fn build() -> anyhow::Result<()> {
 
         symbol(n, &mut sym);
 
-        println!("Renaming wbg.{} to _.{sym}", import.name);
+        log::info!("renaming wbg.{} to _.{sym}", import.name);
 
         saved += (2 + import.name.len()) as isize - sym.len() as isize;
 
@@ -117,7 +120,7 @@ pub fn build() -> anyhow::Result<()> {
     wasm_new.extend_from_slice(&wasm_imports);
     wasm_new.extend_from_slice(parsed.tail);
 
-    println!("Reduced both Wasm and JavaScript files by {saved} bytes");
+    log::reduced!("both .wasm and .js files by {saved} bytes");
 
     std::fs::write(&input, &js_new)?;
     std::fs::write(&wasm, &wasm_new)?;
@@ -185,8 +188,8 @@ impl<'source> Wasm<'source> {
             let section = match payload? {
                 Payload::ImportSection(s) => s,
                 Payload::ExportSection(s) => {
-                    println!(
-                        "Found an export section {:?} {:?}",
+                    log::info!(
+                        "found an export section {:?} {:?}",
                         s.range(),
                         &source[s.range()]
                     );
@@ -194,13 +197,14 @@ impl<'source> Wasm<'source> {
                     let mut iter = s.into_iter_with_offsets();
 
                     while let Some(Ok((index, export))) = iter.next() {
-                        println!("export at {index}: {}", export.name);
+                        log::info!("export at {index}: {}", export.name);
                     }
                     continue;
                 }
                 _ => continue,
             };
-            println!("Found an import section");
+
+            log::info!("found an import section");
 
             // let Payload::ImportSection(section) = payload? else {
             //     continue;

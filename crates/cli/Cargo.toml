@@ -19,6 +19,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"] }
+crossterm = { version = "0.28.1", default-features = false }
 leb128 = "0.2.5"
 oxc = { version = "0.35.0", features = ["minifier", "semantic", "codegen", "transformer"] }
 serde = { version = "1.0.214", features = ["derive"] }
