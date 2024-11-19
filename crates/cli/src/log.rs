@@ -13,6 +13,16 @@ pub fn is_verbose_output_enabled() -> bool {
     VERBOSE_OUTPUT.load(Ordering::Acquire)
 }
 
+static COLOR_OUTPUT: AtomicBool = AtomicBool::new(false);
+
+pub fn enable_color_output() {
+    COLOR_OUTPUT.store(true, Ordering::Release);
+}
+
+pub fn is_color_output_enabled() -> bool {
+    COLOR_OUTPUT.load(Ordering::Acquire)
+}
+
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
@@ -55,8 +65,12 @@ pub struct Error;
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let title = "error".dark_red().bold();
-        write!(f, "{title}")
+        let title = "error";
+        if is_color_output_enabled() {
+            write!(f, "{}", title.dark_red().bold())
+        } else {
+            write!(f, "{title}")
+        }
     }
 }
 
@@ -70,7 +84,11 @@ impl Title {
 
 impl fmt::Display for Title {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let title = self.0.dark_blue().bold();
-        write!(f, "{title}")
+        let title = self.0;
+        if is_color_output_enabled() {
+            write!(f, "{}", title.dark_blue().bold())
+        } else {
+            write!(f, "{title}")
+        }
     }
 }
