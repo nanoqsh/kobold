@@ -3,20 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::log;
-use crate::report::{DisplayError, Report, ReportExt};
+use crate::report::{Report, ReportExt};
 
 pub struct Init {
     pub path: Option<PathBuf>,
     pub name: Option<String>,
 }
 
-pub fn init(init: Init) -> anyhow::Result<()> {
-    init_impl(init)
-        .map_err(DisplayError)
-        .map_err(anyhow::Error::from)
-}
-
-fn init_impl(init: Init) -> Result<(), Report> {
+pub fn init(init: Init) -> Result<(), Report> {
     log::creating!("kobold package");
 
     let path = match init.path {

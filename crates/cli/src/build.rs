@@ -1,15 +1,17 @@
 use std::fmt::{self, Debug};
+use std::fs;
 use std::path::{absolute, Path};
 use std::process::Command;
 
 use leb128::write::unsigned as leb128_write;
+use wasmparser::BinaryReaderError;
 
 use crate::log;
 use crate::manifest::manifest;
-use crate::report::DisplayError;
+use crate::report::{Report, ReportExt};
 
-pub fn build() -> anyhow::Result<()> {
-    let manifest = manifest().map_err(DisplayError)?;
+pub fn build() -> Result<(), Report> {
+    let manifest = manifest()?;
 
     let mut target = manifest.target.clone();
 
@@ -27,7 +29,8 @@ pub fn build() -> anyhow::Result<()> {
     Command::new("wasm-bindgen")
         .arg(&target)
         .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
-        .output()?;
+        .output()
+        .with_message("failed to run wasm-bindgen")?;
 
     let dist_dir = Path::new("dist");
 
@@ -37,14 +40,15 @@ pub fn build() -> anyhow::Result<()> {
     optimize_wasm(&wasm)?;
 
     let elapsed = start.elapsed();
-    let wasm_path = absolute(&wasm)?;
+    let wasm_path = absolute(&wasm).with_message("failed to get absolute path")?;
     log::optimized!("wasm `{}` in {elapsed:.2?}", wasm_path.display());
 
     // return Ok(());
 
-    let wasm_bytes = std::fs::read(&wasm)?;
+    let wasm_bytes = fs::read(&wasm).with_message(format!("failed to read {}", wasm.display()))?;
 
-    let parsed = Wasm::parse(&wasm_bytes)?;
+    let parsed =
+        Wasm::parse(&wasm_bytes).with_message(format!("failed to parse {}", wasm.display()))?;
 
     // println!(
     //     "Found {} imports amounting to {} bytes",
@@ -55,7 +59,8 @@ pub fn build() -> anyhow::Result<()> {
     let mut input = dist_dir.join(&manifest.crate_name);
     input.set_extension("js");
 
-    let js = std::fs::read_to_string(&input)?;
+    let js =
+        fs::read_to_string(&input).with_message(format!("failed to read {}", input.display()))?;
 
     // js::transform(&js, &input);
     // panic!();
@@ -69,7 +74,7 @@ pub fn build() -> anyhow::Result<()> {
 
     wasm_new.extend_from_slice(parsed.head);
 
-    leb128_write(&mut wasm_imports, parsed.imports.len() as u64)?;
+    leb128_write(&mut wasm_imports, parsed.imports.len() as u64).expect("write to vec");
 
     let mut saved = 0;
 
@@ -115,15 +120,15 @@ pub fn build() -> anyhow::Result<()> {
 
     js_new.push_str(remaining);
 
-    leb128_write(&mut wasm_new, wasm_imports.len() as u64)?;
+    leb128_write(&mut wasm_new, wasm_imports.len() as u64).expect("write to vec");
 
     wasm_new.extend_from_slice(&wasm_imports);
     wasm_new.extend_from_slice(parsed.tail);
 
     log::reduced!("both .wasm and .js files by {saved} bytes");
 
-    std::fs::write(&input, &js_new)?;
-    std::fs::write(&wasm, &wasm_new)?;
+    fs::write(&input, &js_new).with_message(format!("failed to write {} file", input.display()))?;
+    fs::write(&wasm, &wasm_new).with_message(format!("failed to write {} file", wasm.display()))?;
 
     Ok(())
 }
@@ -172,7 +177,7 @@ impl Debug for Wasm<'_> {
 }
 
 impl<'source> Wasm<'source> {
-    fn parse(source: &'source [u8]) -> anyhow::Result<Self> {
+    fn parse(source: &'source [u8]) -> Result<Self, BinaryReaderError> {
         use wasmparser::{Parser, Payload};
 
         let parser = Parser::new(0);
@@ -279,15 +284,17 @@ impl Debug for Import<'_> {
     }
 }
 
-fn optimize_wasm(file: &Path) -> anyhow::Result<()> {
+fn optimize_wasm(file: &Path) -> Result<(), Report> {
     Command::new("wasm-opt")
         .arg("-Os")
         .arg(file)
         .arg("-o")
         .arg(file)
         .args(["--enable-simd", "--low-memory-unused"])
-        .spawn()?
-        .wait()?;
+        .spawn()
+        .with_message("failed to run wasm-opt")?
+        .wait()
+        .with_message("failed to optimize wasm")?;
 
     Ok(())
 }

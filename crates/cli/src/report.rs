@@ -67,22 +67,3 @@ where
         self.map_err(|err| Report::new(err, message))
     }
 }
-
-pub struct DisplayError<E>(pub E);
-
-impl<E> fmt::Display for DisplayError<E>
-where
-    E: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<E> fmt::Debug for DisplayError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("DisplayError").field(&"..").finish()
-    }
-}
-
-impl<E> error::Error for DisplayError<E> where E: fmt::Display {}

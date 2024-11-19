@@ -11,7 +11,9 @@ use oxc::semantic::{ScopeTree, SemanticBuilder, SemanticBuilderReturn, SymbolTab
 use oxc::span::SourceType;
 use oxc::transformer::{TransformOptions, Transformer, TransformerReturn};
 
-pub fn transform(source: &str, source_path: &Path) -> anyhow::Result<()> {
+use crate::report::Report;
+
+pub fn transform(source: &str, source_path: &Path) -> Result<(), Report> {
     // let mut temp = String::new();
     // let mut snippets = PathBuf::from(source_path);
 
