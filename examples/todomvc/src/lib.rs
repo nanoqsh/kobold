@@ -114,7 +114,7 @@ fn entry<'a>(idx: usize, entry: &'a Entry, state: &'a Hook<State>) -> impl View 
             <div.view>
                 <input.toggle type="checkbox" checked={entry.completed} onchange={do state.toggle(idx)}>
                 <label ondblclick={do state.edit_entry(idx)}>
-                    { &entry.description }
+                    { use &entry.description }
                 </label>
                 <button.destroy onclick={do state.remove(idx)}>
             </div>
