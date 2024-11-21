@@ -3,24 +3,24 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::log;
-use crate::report::{Report, ReportExt};
+use crate::report::{Error, ErrorExt, Report};
 
 pub struct Init {
     pub path: Option<PathBuf>,
     pub name: Option<String>,
 }
 
-pub fn init(init: Init) -> Result<(), Report> {
+pub fn init(init: Init) -> Report<()> {
     log::creating!("kobold package");
 
     let path = match init.path {
         Some(path) => path,
-        None => env::current_dir().with_message("failed to get current directory")?,
+        None => env::current_dir().message("failed to get current directory")?,
     };
 
     let cargo_path = path.join("Cargo.toml");
     if cargo_path.is_file() {
-        return Err(Report::message(
+        return Err(Error::message(
             "`kobold init` cannot be run on existing Cargo packages",
         ));
     }
@@ -30,7 +30,7 @@ pub fn init(init: Init) -> Result<(), Report> {
         None => match path.file_name().and_then(|s| s.to_str()) {
             Some(name) => name,
             None => {
-                return Err(Report::message(format!(
+                return Err(Error::message(format!(
                     "cannot auto-detect package name from path \"{}\"; use --name to override",
                     path.display(),
                 )))
@@ -45,13 +45,13 @@ pub fn init(init: Init) -> Result<(), Report> {
     Ok(())
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<(), Report> {
+fn write_file(path: &Path, contents: &str) -> Result<(), Error> {
     if path.is_file() {
         return Ok(());
     }
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_message("failed to create parent directories")?;
+        fs::create_dir_all(parent).message("failed to create parent directories")?;
     }
 
     let file_name = path
@@ -59,7 +59,7 @@ fn write_file(path: &Path, contents: &str) -> Result<(), Report> {
         .and_then(|s| s.to_str())
         .expect("file name should be valid");
 
-    fs::write(path, contents).with_message(format!("failed to create `{file_name}` file"))
+    fs::write(path, contents).message(format!("failed to create `{file_name}` file"))
 }
 
 fn make_cargo_toml(name: &str) -> String {

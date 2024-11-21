@@ -13,7 +13,7 @@ use oxc::transformer::{TransformOptions, Transformer, TransformerReturn};
 
 use crate::report::Report;
 
-pub fn transform(source: &str, source_path: &Path) -> Result<(), Report> {
+pub fn transform(source: &str, source_path: &Path) -> Report<()> {
     // let mut temp = String::new();
     // let mut snippets = PathBuf::from(source_path);
 

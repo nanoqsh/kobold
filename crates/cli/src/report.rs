@@ -1,22 +1,19 @@
 use std::error;
 use std::fmt;
+use std::io;
+
+pub type Report<T> = Result<T, Error>;
 
 #[derive(Debug)]
-pub struct Report<
-    E = Box<
-        dyn error::Error //
-            + Send //  anyhow requirement
-            + Sync, // anyhow requirement
-    >,
-> {
-    err: Option<E>,
+pub struct Error {
+    err: Option<io::Error>,
     message: String,
 }
 
-impl<E> Report<E> {
+impl Error {
     pub fn new<U, M>(err: U, message: M) -> Self
     where
-        U: Into<E>,
+        U: Into<io::Error>,
         M: Into<String>,
     {
         Self {
@@ -36,10 +33,7 @@ impl<E> Report<E> {
     }
 }
 
-impl<E> fmt::Display for Report<E>
-where
-    E: fmt::Display,
-{
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)?;
         if let Some(err) = &self.err {
@@ -50,20 +44,30 @@ where
     }
 }
 
-pub trait ReportExt<T, E> {
-    fn with_message<M>(self, message: M) -> Result<T, Report<E>>
+pub trait ErrorExt<T, E> {
+    fn map_err_into_io(self) -> Result<T, io::Error>
     where
+        E: Into<Box<dyn error::Error + Send + Sync>>;
+
+    fn message<M>(self, message: M) -> Result<T, Error>
+    where
+        E: Into<io::Error>,
         M: Into<String>;
 }
 
-impl<T, E, U> ReportExt<T, E> for Result<T, U>
-where
-    U: Into<E>,
-{
-    fn with_message<M>(self, message: M) -> Result<T, Report<E>>
+impl<T, E> ErrorExt<T, E> for Result<T, E> {
+    fn map_err_into_io(self) -> Result<T, io::Error>
     where
+        E: Into<Box<dyn error::Error + Send + Sync>>,
+    {
+        self.map_err(io::Error::other)
+    }
+
+    fn message<M>(self, message: M) -> Result<T, Error>
+    where
+        E: Into<io::Error>,
         M: Into<String>,
     {
-        self.map_err(|err| Report::new(err, message))
+        self.map_err(|err| Error::new(err, message))
     }
 }

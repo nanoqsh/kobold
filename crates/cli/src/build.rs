@@ -8,9 +8,9 @@ use wasmparser::BinaryReaderError;
 
 use crate::log;
 use crate::manifest::manifest;
-use crate::report::{Report, ReportExt};
+use crate::report::{ErrorExt, Report};
 
-pub fn build() -> Result<(), Report> {
+pub fn build() -> Report<()> {
     let manifest = manifest()?;
 
     let mut target = manifest.target.clone();
@@ -30,7 +30,7 @@ pub fn build() -> Result<(), Report> {
         .arg(&target)
         .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
         .output()
-        .with_message("failed to run wasm-bindgen")?;
+        .message("failed to run wasm-bindgen")?;
 
     let dist_dir = Path::new("dist");
 
@@ -40,15 +40,16 @@ pub fn build() -> Result<(), Report> {
     optimize_wasm(&wasm)?;
 
     let elapsed = start.elapsed();
-    let wasm_path = absolute(&wasm).with_message("failed to get absolute path")?;
+    let wasm_path = absolute(&wasm).message("failed to get absolute path")?;
     log::optimized!("wasm `{}` in {elapsed:.2?}", wasm_path.display());
 
     // return Ok(());
 
-    let wasm_bytes = fs::read(&wasm).with_message(format!("failed to read {}", wasm.display()))?;
+    let wasm_bytes = fs::read(&wasm).message(format!("failed to read {}", wasm.display()))?;
 
-    let parsed =
-        Wasm::parse(&wasm_bytes).with_message(format!("failed to parse {}", wasm.display()))?;
+    let parsed = Wasm::parse(&wasm_bytes)
+        .map_err_into_io()
+        .message(format!("failed to parse {}", wasm.display()))?;
 
     // println!(
     //     "Found {} imports amounting to {} bytes",
@@ -59,8 +60,7 @@ pub fn build() -> Result<(), Report> {
     let mut input = dist_dir.join(&manifest.crate_name);
     input.set_extension("js");
 
-    let js =
-        fs::read_to_string(&input).with_message(format!("failed to read {}", input.display()))?;
+    let js = fs::read_to_string(&input).message(format!("failed to read {}", input.display()))?;
 
     // js::transform(&js, &input);
     // panic!();
@@ -127,8 +127,8 @@ pub fn build() -> Result<(), Report> {
 
     log::reduced!("both .wasm and .js files by {saved} bytes");
 
-    fs::write(&input, &js_new).with_message(format!("failed to write {} file", input.display()))?;
-    fs::write(&wasm, &wasm_new).with_message(format!("failed to write {} file", wasm.display()))?;
+    fs::write(&input, &js_new).message(format!("failed to write {} file", input.display()))?;
+    fs::write(&wasm, &wasm_new).message(format!("failed to write {} file", wasm.display()))?;
 
     Ok(())
 }
@@ -284,7 +284,7 @@ impl Debug for Import<'_> {
     }
 }
 
-fn optimize_wasm(file: &Path) -> Result<(), Report> {
+fn optimize_wasm(file: &Path) -> Report<()> {
     Command::new("wasm-opt")
         .arg("-Os")
         .arg(file)
@@ -292,9 +292,9 @@ fn optimize_wasm(file: &Path) -> Result<(), Report> {
         .arg(file)
         .args(["--enable-simd", "--low-memory-unused"])
         .spawn()
-        .with_message("failed to run wasm-opt")?
+        .message("failed to run wasm-opt")?
         .wait()
-        .with_message("failed to optimize wasm")?;
+        .message("failed to optimize wasm")?;
 
     Ok(())
 }

@@ -10,23 +10,23 @@ use tokio::net::TcpListener;
 use tokio::runtime::Builder;
 
 use crate::log;
-use crate::report::{Report, ReportExt};
+use crate::report::{ErrorExt, Report};
 
-pub fn serve() -> Result<(), Report> {
+pub fn serve() -> Report<()> {
     Builder::new_current_thread()
         .enable_all()
         .build()
-        .with_message("failed to create tokio runtime")?
+        .message("failed to create tokio runtime")?
         .block_on(start())
 }
 
-async fn start() -> Result<(), Report> {
+async fn start() -> Report<()> {
     let ip = Ipv4Addr::LOCALHOST;
     let port = 3000;
 
     let listener = TcpListener::bind((ip, port))
         .await
-        .with_message(format!("failed to bind tcp listener to {ip}:{port}"))?;
+        .message(format!("failed to bind tcp listener to {ip}:{port}"))?;
 
     log::starting!("development server at http://{ip}:{port}");
 
@@ -34,7 +34,7 @@ async fn start() -> Result<(), Report> {
         let (tcp, _) = listener
             .accept()
             .await
-            .with_message("failed to accept tcp connection")?;
+            .message("failed to accept tcp connection")?;
 
         async fn hello(_: Request<Incoming>) -> Result<Response<String>, Infallible> {
             Ok(Response::new(String::from("Hello World!")))

@@ -3,7 +3,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-use crate::report::{Report, ReportExt};
+use crate::report::{Error, ErrorExt, Report};
 
 #[derive(Deserialize)]
 struct CargoManifest {
@@ -20,21 +20,21 @@ pub struct Manifest {
     pub target: PathBuf,
 }
 
-pub fn manifest() -> Result<Manifest, Report> {
+pub fn manifest() -> Report<Manifest> {
     let out = Command::new("cargo")
         .arg("read-manifest")
         .output()
-        .with_message("failed to run cargo")?;
+        .message("failed to run cargo")?;
 
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(Report::message(format!(
+        return Err(Error::message(format!(
             "failed to read cargo manifest\n{err}",
         )));
     }
 
     let manifest: CargoManifest =
-        serde_json::from_slice(&out.stdout).with_message("failed to parse cargo manifest")?;
+        serde_json::from_slice(&out.stdout).message("failed to parse cargo manifest")?;
 
     let out = Command::new("cargo")
         .args([
@@ -44,24 +44,24 @@ pub fn manifest() -> Result<Manifest, Report> {
             "--no-deps",
         ])
         .output()
-        .with_message("failed to run cargo")?;
+        .message("failed to run cargo")?;
 
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(Report::message(format!(
+        return Err(Error::message(format!(
             "failed to read cargo metadata\n{err}",
         )));
     }
 
     let metadata: Metadata =
-        serde_json::from_slice(&out.stdout).with_message("failed to parse cargo metadata")?;
+        serde_json::from_slice(&out.stdout).message("failed to parse cargo metadata")?;
 
     Command::new("cargo")
         .args(["build", "--release", "--target=wasm32-unknown-unknown"])
         .spawn()
-        .with_message("failed to run cargo")?
+        .message("failed to run cargo")?
         .wait()
-        .with_message("failed to build cargo crate")?;
+        .message("failed to build cargo crate")?;
 
     Ok(Manifest {
         crate_name: manifest.name,
