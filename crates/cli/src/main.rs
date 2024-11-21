@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::build::build;
 use crate::init::{init, Init};
+use crate::serve::serve;
 
 mod build;
 mod init;
@@ -14,6 +15,7 @@ mod js;
 mod log;
 mod manifest;
 mod report;
+mod serve;
 
 /// CLI tools for the Kobold framework
 #[derive(Parser)]
@@ -79,7 +81,7 @@ fn main() -> ExitCode {
     let res = match cli.command {
         Command::Build => build(),
         Command::Init { path, name } => init(Init { path, name }),
-        Command::Serve => todo!(),
+        Command::Serve => serve(),
     };
 
     match res {

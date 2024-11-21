@@ -60,6 +60,15 @@ macro_rules! creating {
 pub use creating;
 
 #[macro_export]
+macro_rules! starting {
+    ($($arg:tt)*) => {
+        eprintln!("{} {}", $crate::log::Title("    Starting"), format_args!($($arg)*));
+    };
+}
+
+pub use starting;
+
+#[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
         if $crate::log::is_verbose_output_enabled() {
