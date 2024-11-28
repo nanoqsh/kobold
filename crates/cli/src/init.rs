@@ -45,7 +45,7 @@ pub fn init(init: Init) -> Report<()> {
     Ok(())
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<(), Error> {
+fn write_file(path: &Path, contents: &str) -> Report<()> {
     if path.is_file() {
         return Ok(());
     }
