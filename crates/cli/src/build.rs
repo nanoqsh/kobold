@@ -23,7 +23,7 @@ pub fn build() -> Report<()> {
 
     log::building!("{crate_name} v{crate_version}");
 
-    build_cargo_crate()?;
+    build_wasm()?;
 
     target.push("wasm32-unknown-unknown");
     target.push("release");
@@ -55,10 +55,8 @@ pub fn build() -> Report<()> {
     mangle_wasm(&wasm, &js)?;
 
     let snippets_dir = dist.join("snippets");
-    let snippets = read_file_paths(&snippets_dir).message(format!(
-        "failed to read {} directory",
-        snippets_dir.display(),
-    ))?;
+    let snippets = read_file_paths(&snippets_dir)
+        .with_message(|| format!("failed to read {} directory", snippets_dir.display()))?;
 
     let index = dist.join("index.html");
     let dist = DistPaths {
@@ -73,7 +71,7 @@ pub fn build() -> Report<()> {
     Ok(())
 }
 
-fn build_cargo_crate() -> Report<()> {
+fn build_wasm() -> Report<()> {
     let status = Command::new("cargo")
         .args(["build", "--release", "--target=wasm32-unknown-unknown"])
         .spawn()
@@ -114,11 +112,12 @@ fn optimize_wasm(file: &Path) -> Report<()> {
 }
 
 fn mangle_wasm(wasm: &Path, js: &Path) -> Report<()> {
-    let wasm_bytes = fs::read(&wasm).message(format!("failed to read {}", wasm.display()))?;
+    let wasm_bytes =
+        fs::read(wasm).with_message(|| format!("failed to read {}", wasm.display()))?;
 
     let parsed = Wasm::parse(&wasm_bytes)
         .map_err_into_io()
-        .message(format!("failed to parse {}", wasm.display()))?;
+        .with_message(|| format!("failed to parse {}", wasm.display()))?;
 
     // println!(
     //     "Found {} imports amounting to {} bytes",
@@ -126,7 +125,8 @@ fn mangle_wasm(wasm: &Path, js: &Path) -> Report<()> {
     //     parsed.imports.iter().map(|b| b.name.len()).sum::<usize>()
     // );
 
-    let js_content = fs::read_to_string(&js).message(format!("failed to read {}", js.display()))?;
+    let js_content =
+        fs::read_to_string(js).with_message(|| format!("failed to read {}", js.display()))?;
 
     let mut remaining = js_content.as_str();
 
@@ -190,8 +190,9 @@ fn mangle_wasm(wasm: &Path, js: &Path) -> Report<()> {
 
     log::info!("reduced both .wasm and .js files by {saved} bytes");
 
-    fs::write(&js, js_new).message(format!("failed to write {} file", js.display()))?;
-    fs::write(&wasm, wasm_new).message(format!("failed to write {} file", wasm.display()))?;
+    fs::write(js, js_new).with_message(|| format!("failed to write {} file", js.display()))?;
+    fs::write(wasm, wasm_new)
+        .with_message(|| format!("failed to write {} file", wasm.display()))?;
 
     Ok(())
 }
@@ -416,7 +417,7 @@ fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
     );
 
     let html = fs::read_to_string(orig_index)
-        .message(format!("failed to read {}", orig_index.display()))?;
+        .with_message(|| format!("failed to read {}", orig_index.display()))?;
 
     let settings = RewriteStrSettings {
         element_content_handlers: vec![
@@ -442,7 +443,7 @@ fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
         .message("failed to rewrite html")?;
 
     fs::write(dist.index, html_new)
-        .message(format!("failed to write {} file", dist.index.display()))?;
+        .with_message(|| format!("failed to write {} file", dist.index.display()))?;
 
     Ok(())
 }

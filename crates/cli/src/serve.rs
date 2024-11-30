@@ -28,7 +28,7 @@ async fn start() -> Report<()> {
 
     let listener = TcpListener::bind((ip, port))
         .await
-        .message(format!("failed to bind tcp listener to {ip}:{port}"))?;
+        .with_message(|| format!("failed to bind tcp listener to {ip}:{port}"))?;
 
     log::starting!("development server at http://{ip}:{port}");
 

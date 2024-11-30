@@ -59,7 +59,7 @@ fn write_file(path: &Path, contents: &str) -> Report<()> {
         .and_then(|s| s.to_str())
         .expect("file name should be valid");
 
-    fs::write(path, contents).message(format!("failed to create `{file_name}` file"))
+    fs::write(path, contents).with_message(|| format!("failed to create `{file_name}` file"))
 }
 
 fn make_cargo_toml(name: &str) -> String {

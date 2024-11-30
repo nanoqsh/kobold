@@ -49,9 +49,14 @@ pub trait ErrorExt<T, E> {
     where
         E: Into<Box<dyn error::Error + Send + Sync>>;
 
-    fn message<M>(self, message: M) -> Result<T, Error>
+    fn message(self, message: &str) -> Result<T, Error>
+    where
+        E: Into<io::Error>;
+
+    fn with_message<F, M>(self, f: F) -> Result<T, Error>
     where
         E: Into<io::Error>,
+        F: FnOnce() -> M,
         M: Into<String>;
 }
 
@@ -63,11 +68,19 @@ impl<T, E> ErrorExt<T, E> for Result<T, E> {
         self.map_err(io::Error::other)
     }
 
-    fn message<M>(self, message: M) -> Result<T, Error>
+    fn message(self, message: &str) -> Result<T, Error>
     where
         E: Into<io::Error>,
-        M: Into<String>,
     {
         self.map_err(|err| Error::new(err, message))
+    }
+
+    fn with_message<F, M>(self, f: F) -> Result<T, Error>
+    where
+        E: Into<io::Error>,
+        F: FnOnce() -> M,
+        M: Into<String>,
+    {
+        self.map_err(|err| Error::new(err, f()))
     }
 }
