@@ -8,10 +8,13 @@ use tokio::runtime::Builder;
 use tower_async::Service;
 use tower_async_http::services::ServeDir;
 
+use crate::build::build;
 use crate::log;
 use crate::report::{ErrorExt, Report};
 
 pub fn serve() -> Report<()> {
+    build()?;
+
     Builder::new_current_thread()
         .enable_all()
         .build()

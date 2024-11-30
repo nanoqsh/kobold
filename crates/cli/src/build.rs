@@ -1,40 +1,46 @@
-use std::fmt::{self, Debug};
+use std::borrow::Cow;
+use std::fmt::{self, Debug, Display};
 use std::fs;
-use std::path::{absolute, Path};
+use std::io;
+use std::path::{absolute, Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 use leb128::write::unsigned as leb128_write;
+use lol_html::{element, html_content::ContentType, rewrite_str, RewriteStrSettings};
 use wasmparser::BinaryReaderError;
 
 use crate::log;
-use crate::manifest::manifest;
-use crate::report::{ErrorExt, Report};
+use crate::manifest::{manifest, Manifest};
+use crate::report::{Error, ErrorExt, Report};
 
 pub fn build() -> Report<()> {
-    let manifest = manifest()?;
+    let Manifest {
+        crate_name,
+        crate_version,
+        mut target,
+    } = manifest()?;
 
-    let mut target = manifest.target.clone();
+    log::building!("{crate_name} v{crate_version}");
+
+    build_cargo_crate()?;
 
     target.push("wasm32-unknown-unknown");
     target.push("release");
-    target.push(&manifest.crate_name);
+    target.push(&crate_name);
     target.set_extension("wasm");
 
-    if !manifest.target.exists() {
+    if !target.exists() {
         panic!("Couldn't find compiled Wasm: {target:?}");
     }
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
-    Command::new("wasm-bindgen")
-        .arg(&target)
-        .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
-        .output()
-        .message("failed to run wasm-bindgen")?;
+    run_wasm_bindgen(&target)?;
 
-    let dist_dir = Path::new("dist");
+    let dist = Path::new("dist");
 
-    let mut wasm = dist_dir.join(format!("{}_bg", &manifest.crate_name));
+    let mut wasm = dist.join(format!("{crate_name}_bg"));
     wasm.set_extension("wasm");
 
     optimize_wasm(&wasm)?;
@@ -43,8 +49,71 @@ pub fn build() -> Report<()> {
     let wasm_path = absolute(&wasm).message("failed to get absolute path")?;
     log::optimized!("wasm `{}` in {elapsed:.2?}", wasm_path.display());
 
-    // return Ok(());
+    let mut js = dist.join(&crate_name);
+    js.set_extension("js");
 
+    mangle_wasm(&wasm, &js)?;
+
+    let snippets_dir = dist.join("snippets");
+    let snippets = read_file_paths(&snippets_dir).message(format!(
+        "failed to read {} directory",
+        snippets_dir.display(),
+    ))?;
+
+    let index = dist.join("index.html");
+    let dist = DistPaths {
+        snippets: &snippets,
+        wasm: &wasm,
+        js: &js,
+        index: &index,
+    };
+
+    make_index_html(Path::new("index.html"), dist)?;
+
+    Ok(())
+}
+
+fn build_cargo_crate() -> Report<()> {
+    let status = Command::new("cargo")
+        .args(["build", "--release", "--target=wasm32-unknown-unknown"])
+        .spawn()
+        .message("failed to run cargo")?
+        .wait()
+        .message("failed to build cargo crate")?;
+
+    if !status.success() {
+        return Err(Error::message("failed to build cargo crate"));
+    }
+
+    Ok(())
+}
+
+fn run_wasm_bindgen(target: &Path) -> Report<()> {
+    Command::new("wasm-bindgen")
+        .arg(target)
+        .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
+        .output()
+        .message("failed to run wasm-bindgen")?;
+
+    Ok(())
+}
+
+fn optimize_wasm(file: &Path) -> Report<()> {
+    Command::new("wasm-opt")
+        .arg("-Os")
+        .arg(file)
+        .arg("-o")
+        .arg(file)
+        .args(["--enable-simd", "--low-memory-unused"])
+        .spawn()
+        .message("failed to run wasm-opt")?
+        .wait()
+        .message("failed to optimize wasm")?;
+
+    Ok(())
+}
+
+fn mangle_wasm(wasm: &Path, js: &Path) -> Report<()> {
     let wasm_bytes = fs::read(&wasm).message(format!("failed to read {}", wasm.display()))?;
 
     let parsed = Wasm::parse(&wasm_bytes)
@@ -57,18 +126,12 @@ pub fn build() -> Report<()> {
     //     parsed.imports.iter().map(|b| b.name.len()).sum::<usize>()
     // );
 
-    let mut input = dist_dir.join(&manifest.crate_name);
-    input.set_extension("js");
+    let js_content = fs::read_to_string(&js).message(format!("failed to read {}", js.display()))?;
 
-    let js = fs::read_to_string(&input).message(format!("failed to read {}", input.display()))?;
-
-    // js::transform(&js, &input);
-    // panic!();
-
-    let mut remaining = js.as_str();
+    let mut remaining = js_content.as_str();
 
     let mut sym = String::with_capacity(4);
-    let mut js_new = String::with_capacity(js.len());
+    let mut js_new = String::with_capacity(js_content.len());
     let mut wasm_new = Vec::with_capacity(wasm_bytes.len());
     let mut wasm_imports = Vec::with_capacity(parsed.size);
 
@@ -125,10 +188,10 @@ pub fn build() -> Report<()> {
     wasm_new.extend_from_slice(&wasm_imports);
     wasm_new.extend_from_slice(parsed.tail);
 
-    log::reduced!("both .wasm and .js files by {saved} bytes");
+    log::info!("reduced both .wasm and .js files by {saved} bytes");
 
-    fs::write(&input, &js_new).message(format!("failed to write {} file", input.display()))?;
-    fs::write(&wasm, &wasm_new).message(format!("failed to write {} file", wasm.display()))?;
+    fs::write(&js, js_new).message(format!("failed to write {} file", js.display()))?;
+    fs::write(&wasm, wasm_new).message(format!("failed to write {} file", wasm.display()))?;
 
     Ok(())
 }
@@ -284,17 +347,102 @@ impl Debug for Import<'_> {
     }
 }
 
-fn optimize_wasm(file: &Path) -> Report<()> {
-    Command::new("wasm-opt")
-        .arg("-Os")
-        .arg(file)
-        .arg("-o")
-        .arg(file)
-        .args(["--enable-simd", "--low-memory-unused"])
-        .spawn()
-        .message("failed to run wasm-opt")?
-        .wait()
-        .message("failed to optimize wasm")?;
+fn read_file_paths(path: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut paths = vec![];
+    let mut to_visit = vec![Cow::Borrowed(path)];
+    while let Some(dir) = to_visit.pop() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if file_type.is_file() {
+                paths.push(entry.path());
+                continue;
+            }
+
+            if file_type.is_dir() {
+                to_visit.push(Cow::Owned(entry.path()));
+            }
+        }
+    }
+
+    Ok(paths)
+}
+
+struct DistPaths<'path> {
+    snippets: &'path [PathBuf],
+    wasm: &'path Path,
+    js: &'path Path,
+    index: &'path Path,
+}
+
+fn embed_path(path: &Path) -> impl Display + use<'_> {
+    struct Show<'path>(&'path Path);
+
+    impl Display for Show<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "/{}", self.0.display())
+        }
+    }
+
+    Show(
+        path.strip_prefix("dist")
+            .expect("the path must have 'dist' prefix"),
+    )
+}
+
+fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
+    fn js_link(path: &Path) -> String {
+        format!(
+            r#"<link rel="modulepreload" href="{}" crossorigin=anonymous>"#,
+            embed_path(path),
+        )
+    }
+
+    fn wasm_link(path: &Path) -> String {
+        format!(
+            r#"<link rel="preload" href="{}" crossorigin=anonymous as="fetch" type="application/wasm">"#,
+            embed_path(path),
+        )
+    }
+
+    let js_script = format!(
+        "<script type=\"module\">\n\
+            import init, * as bindings from '{}';\n\
+            window.wasmBindings = bindings;\n\
+            await init({{ module_or_path: '{}' }});\n\
+        </script>\n",
+        embed_path(dist.js),
+        embed_path(dist.wasm),
+    );
+
+    let html = fs::read_to_string(orig_index)
+        .message(format!("failed to read {}", orig_index.display()))?;
+
+    let settings = RewriteStrSettings {
+        element_content_handlers: vec![
+            element!("head", |el| {
+                el.append(&js_link(dist.js), ContentType::Html);
+                el.append(&wasm_link(dist.wasm), ContentType::Html);
+                for snippet in dist.snippets {
+                    el.append(&js_link(snippet), ContentType::Html);
+                }
+
+                Ok(())
+            }),
+            element!("body", |el| {
+                el.append(&js_script, ContentType::Html);
+                Ok(())
+            }),
+        ],
+        ..RewriteStrSettings::new()
+    };
+
+    let html_new = rewrite_str(&html, settings)
+        .map_err_into_io()
+        .message("failed to rewrite html")?;
+
+    fs::write(dist.index, html_new)
+        .message(format!("failed to write {} file", dist.index.display()))?;
 
     Ok(())
 }

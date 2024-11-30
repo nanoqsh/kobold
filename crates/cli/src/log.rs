@@ -33,6 +33,15 @@ macro_rules! error {
 pub use error;
 
 #[macro_export]
+macro_rules! building {
+    ($($arg:tt)*) => {
+        eprintln!("{} {}", $crate::log::Title("    Building"), format_args!($($arg)*));
+    };
+}
+
+pub use building;
+
+#[macro_export]
 macro_rules! optimized {
     ($($arg:tt)*) => {
         eprintln!("{} {}", $crate::log::Title("   Optimized"), format_args!($($arg)*));
@@ -40,15 +49,6 @@ macro_rules! optimized {
 }
 
 pub use optimized;
-
-#[macro_export]
-macro_rules! reduced {
-    ($($arg:tt)*) => {
-        eprintln!("{} {}", $crate::log::Title("     Reduced"), format_args!($($arg)*));
-    };
-}
-
-pub use reduced;
 
 #[macro_export]
 macro_rules! creating {

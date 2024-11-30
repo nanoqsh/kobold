@@ -8,6 +8,7 @@ use crate::report::{Error, ErrorExt, Report};
 #[derive(Deserialize)]
 struct CargoManifest {
     name: String,
+    version: String,
 }
 
 #[derive(Deserialize)]
@@ -17,6 +18,7 @@ struct Metadata {
 
 pub struct Manifest {
     pub crate_name: String,
+    pub crate_version: String,
     pub target: PathBuf,
 }
 
@@ -56,15 +58,9 @@ pub fn manifest() -> Report<Manifest> {
     let metadata: Metadata =
         serde_json::from_slice(&out.stdout).message("failed to parse cargo metadata")?;
 
-    Command::new("cargo")
-        .args(["build", "--release", "--target=wasm32-unknown-unknown"])
-        .spawn()
-        .message("failed to run cargo")?
-        .wait()
-        .message("failed to build cargo crate")?;
-
     Ok(Manifest {
         crate_name: manifest.name,
+        crate_version: manifest.version,
         target: metadata.target_directory,
     })
 }
