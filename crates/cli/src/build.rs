@@ -90,7 +90,7 @@ fn build_wasm() -> Report<()> {
 }
 
 fn run_wasm_bindgen(target: &Path, dist: &Path) -> Report<()> {
-    let output = Command::new("wasm-bindgen")
+    let out = Command::new("wasm-bindgen")
         .arg(target)
         .arg("--out-dir")
         .arg(dist)
@@ -98,10 +98,11 @@ fn run_wasm_bindgen(target: &Path, dist: &Path) -> Report<()> {
         .output()
         .message("failed to run wasm-bindgen")?;
 
-    if output.status.success() {
+    if out.status.success() {
         Ok(())
     } else {
-        Err(Error::message("failed to run wasm-bindgen"))
+        let err = String::from_utf8_lossy(&out.stderr);
+        Err(Error::message(format!("failed to run wasm-bindgen\n{err}")))
     }
 }
 
@@ -284,9 +285,6 @@ impl<'source> Wasm<'source> {
 
             log::info!("found an import section");
 
-            // let Payload::ImportSection(section) = payload? else {
-            //     continue;
-            // };
             let mut head = &source[..section.range().start - 1];
             let size = section.range().end - section.range().start;
             let wasm = &source[section.range()];
@@ -366,10 +364,7 @@ fn read_file_paths(path: &Path) -> io::Result<Vec<PathBuf>> {
             let file_type = entry.file_type()?;
             if file_type.is_file() {
                 paths.push(entry.path());
-                continue;
-            }
-
-            if file_type.is_dir() {
+            } else if file_type.is_dir() {
                 to_visit.push(Cow::Owned(entry.path()));
             }
         }
