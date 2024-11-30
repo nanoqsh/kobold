@@ -2,10 +2,10 @@ use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use std::{env, path::PathBuf};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::build::build;
-use crate::init::{init, Init};
+use crate::init::init;
 use crate::serve::serve;
 
 mod build;
@@ -37,21 +37,20 @@ struct Cli {
 enum Command {
     /// Build a kobold crate
     #[command(visible_alias = "b")]
-    Build,
+    Build {
+        #[command(flatten)]
+        b: Build,
+    },
 
     /// Create a new kobold crate
-    Init {
-        /// Package directory, defaults to the current directory
-        path: Option<PathBuf>,
-
-        /// Set the resulting package name, defaults to the directory name
-        #[arg(long)]
-        name: Option<String>,
-    },
+    Init(Init),
 
     /// Start a local development server
     #[command(visible_alias = "s")]
-    Serve,
+    Serve {
+        #[command(flatten)]
+        b: Build,
+    },
 }
 
 #[derive(Clone, Copy, Default, ValueEnum)]
@@ -60,6 +59,23 @@ enum When {
     Auto,
     Always,
     Never,
+}
+
+#[derive(Args)]
+struct Build {
+    /// The asset output directory
+    #[arg(short, long, default_value = "dist")]
+    dist: PathBuf,
+}
+
+#[derive(Args)]
+struct Init {
+    /// Package directory, defaults to the current directory
+    path: Option<PathBuf>,
+
+    /// Set the resulting package name, defaults to the directory name
+    #[arg(long)]
+    name: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -79,9 +95,9 @@ fn main() -> ExitCode {
     }
 
     let res = match cli.command {
-        Command::Build => build(),
-        Command::Init { path, name } => init(Init { path, name }),
-        Command::Serve => serve(),
+        Command::Build { b } => build(&b),
+        Command::Init(i) => init(&i),
+        Command::Serve { b } => serve(&b),
     };
 
     match res {

@@ -13,8 +13,9 @@ use wasmparser::BinaryReaderError;
 use crate::log;
 use crate::manifest::{manifest, Manifest};
 use crate::report::{Error, ErrorExt, Report};
+use crate::Build;
 
-pub fn build() -> Report<()> {
+pub fn build(b: &Build) -> Report<()> {
     let Manifest {
         crate_name,
         crate_version,
@@ -31,16 +32,17 @@ pub fn build() -> Report<()> {
     target.set_extension("wasm");
 
     if !target.exists() {
-        panic!("Couldn't find compiled Wasm: {target:?}");
+        return Err(Error::message(format!(
+            "couldn't find compiled .wasm: {}",
+            target.display(),
+        )));
     }
 
     let start = Instant::now();
 
-    run_wasm_bindgen(&target)?;
+    run_wasm_bindgen(&target, &b.dist)?;
 
-    let dist = Path::new("dist");
-
-    let mut wasm = dist.join(format!("{crate_name}_bg"));
+    let mut wasm = b.dist.join(format!("{crate_name}_bg"));
     wasm.set_extension("wasm");
 
     optimize_wasm(&wasm)?;
@@ -49,24 +51,25 @@ pub fn build() -> Report<()> {
     let wasm_path = absolute(&wasm).message("failed to get absolute path")?;
     log::optimized!("wasm `{}` in {elapsed:.2?}", wasm_path.display());
 
-    let mut js = dist.join(&crate_name);
+    let mut js = b.dist.join(&crate_name);
     js.set_extension("js");
 
     mangle_wasm(&wasm, &js)?;
 
-    let snippets_dir = dist.join("snippets");
+    let snippets_dir = b.dist.join("snippets");
     let snippets = read_file_paths(&snippets_dir)
         .with_message(|| format!("failed to read {} directory", snippets_dir.display()))?;
 
-    let index = dist.join("index.html");
-    let dist = DistPaths {
+    let index = b.dist.join("index.html");
+    let paths = Paths {
+        dist: Dist(&b.dist),
         snippets: &snippets,
         wasm: &wasm,
         js: &js,
         index: &index,
     };
 
-    make_index_html(Path::new("index.html"), dist)?;
+    make_index_html(Path::new("index.html"), paths)?;
 
     Ok(())
 }
@@ -79,21 +82,27 @@ fn build_wasm() -> Report<()> {
         .wait()
         .message("failed to build cargo crate")?;
 
-    if !status.success() {
-        return Err(Error::message("failed to build cargo crate"));
+    if status.success() {
+        Ok(())
+    } else {
+        Err(Error::message("failed to build cargo crate"))
     }
-
-    Ok(())
 }
 
-fn run_wasm_bindgen(target: &Path) -> Report<()> {
-    Command::new("wasm-bindgen")
+fn run_wasm_bindgen(target: &Path, dist: &Path) -> Report<()> {
+    let output = Command::new("wasm-bindgen")
         .arg(target)
-        .args(["--out-dir=dist", "--target=web", "--no-typescript"]) //, "--omit-imports"])
+        .arg("--out-dir")
+        .arg(dist)
+        .args(["--target=web", "--no-typescript"])
         .output()
         .message("failed to run wasm-bindgen")?;
 
-    Ok(())
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(Error::message("failed to run wasm-bindgen"))
+    }
 }
 
 fn optimize_wasm(file: &Path) -> Report<()> {
@@ -369,42 +378,48 @@ fn read_file_paths(path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-struct DistPaths<'path> {
+struct Paths<'path> {
+    dist: Dist<'path>,
     snippets: &'path [PathBuf],
     wasm: &'path Path,
     js: &'path Path,
     index: &'path Path,
 }
 
-fn embed_path(path: &Path) -> impl Display + use<'_> {
-    struct Show<'path>(&'path Path);
+#[derive(Clone, Copy)]
+struct Dist<'path>(&'path Path);
 
-    impl Display for Show<'_> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "/{}", self.0.display())
+impl Dist<'_> {
+    fn embed_path(self, path: &Path) -> impl Display + use<'_> {
+        struct Show<'path>(&'path Path);
+
+        impl Display for Show<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "/{}", self.0.display())
+            }
         }
-    }
 
-    Show(
-        path.strip_prefix("dist")
-            .expect("the path must have 'dist' prefix"),
-    )
+        Show(
+            path.strip_prefix(self.0)
+                .expect("the path must have dist prefix"),
+        )
+    }
 }
 
-fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
-    fn js_link(path: &Path) -> String {
+fn make_index_html(orig_index: &Path, paths: Paths<'_>) -> Report<()> {
+    let js_link = |p| {
         format!(
             r#"<link rel="modulepreload" href="{}" crossorigin=anonymous>"#,
-            embed_path(path),
+            paths.dist.embed_path(p),
         )
-    }
+    };
 
-    fn wasm_link(path: &Path) -> String {
+    let wasm_link = |p| {
         format!(
             r#"<link rel="preload" href="{}" crossorigin=anonymous as="fetch" type="application/wasm">"#,
-            embed_path(path),
+            paths.dist.embed_path(p),
         )
-    }
+    };
 
     let js_script = format!(
         "<script type=\"module\">\n\
@@ -412,19 +427,26 @@ fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
             window.wasmBindings = bindings;\n\
             await init({{ module_or_path: '{}' }});\n\
         </script>\n",
-        embed_path(dist.js),
-        embed_path(dist.wasm),
+        paths.dist.embed_path(paths.js),
+        paths.dist.embed_path(paths.wasm),
     );
 
     let html = fs::read_to_string(orig_index)
+        .or_else(|err| {
+            if err.kind() == io::ErrorKind::NotFound {
+                Ok(include_str!("../init/index.html").to_owned())
+            } else {
+                Err(err)
+            }
+        })
         .with_message(|| format!("failed to read {}", orig_index.display()))?;
 
     let settings = RewriteStrSettings {
         element_content_handlers: vec![
             element!("head", |el| {
-                el.append(&js_link(dist.js), ContentType::Html);
-                el.append(&wasm_link(dist.wasm), ContentType::Html);
-                for snippet in dist.snippets {
+                el.append(&js_link(paths.js), ContentType::Html);
+                el.append(&wasm_link(paths.wasm), ContentType::Html);
+                for snippet in paths.snippets {
                     el.append(&js_link(snippet), ContentType::Html);
                 }
 
@@ -442,8 +464,8 @@ fn make_index_html(orig_index: &Path, dist: DistPaths<'_>) -> Report<()> {
         .map_err_into_io()
         .message("failed to rewrite html")?;
 
-    fs::write(dist.index, html_new)
-        .with_message(|| format!("failed to write {} file", dist.index.display()))?;
+    fs::write(paths.index, html_new)
+        .with_message(|| format!("failed to write {} file", paths.index.display()))?;
 
     Ok(())
 }

@@ -1,21 +1,17 @@
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::log;
 use crate::report::{Error, ErrorExt, Report};
+use crate::Init;
 
-pub struct Init {
-    pub path: Option<PathBuf>,
-    pub name: Option<String>,
-}
-
-pub fn init(init: Init) -> Report<()> {
+pub fn init(init: &Init) -> Report<()> {
     log::creating!("kobold package");
 
-    let path = match init.path {
+    let path = match &init.path {
         Some(path) => path,
-        None => env::current_dir().message("failed to get current directory")?,
+        None => &env::current_dir().message("failed to get current directory")?,
     };
 
     let cargo_path = path.join("Cargo.toml");

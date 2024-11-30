@@ -1,4 +1,5 @@
 use std::net::Ipv4Addr;
+use std::path::Path;
 
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -11,18 +12,19 @@ use tower_async_http::services::ServeDir;
 use crate::build::build;
 use crate::log;
 use crate::report::{ErrorExt, Report};
+use crate::Build;
 
-pub fn serve() -> Report<()> {
-    build()?;
+pub fn serve(b: &Build) -> Report<()> {
+    build(b)?;
 
     Builder::new_current_thread()
         .enable_all()
         .build()
         .message("failed to create tokio runtime")?
-        .block_on(start())
+        .block_on(start(&b.dist))
 }
 
-async fn start() -> Report<()> {
+async fn start(dist: &Path) -> Report<()> {
     let ip = Ipv4Addr::LOCALHOST;
     let port = 3000;
 
@@ -32,7 +34,7 @@ async fn start() -> Report<()> {
 
     log::starting!("development server at http://{ip}:{port}");
 
-    let serve_dist: &_ = Box::leak(Box::new(ServeDir::new("dist")));
+    let serve_dist: &_ = Box::leak(Box::new(ServeDir::new(dist)));
 
     loop {
         let (tcp, _) = listener
