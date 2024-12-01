@@ -7,7 +7,9 @@ use std::process::Command;
 use std::time::Instant;
 
 use leb128::write::unsigned as leb128_write;
-use lol_html::{element, html_content::ContentType, rewrite_str, RewriteStrSettings};
+use lol_html::{
+    element, html_content::ContentType, html_content::Element, rewrite_str, RewriteStrSettings,
+};
 use wasmparser::BinaryReaderError;
 
 use crate::log;
@@ -436,19 +438,34 @@ fn make_index_html(orig_index: &Path, paths: Paths<'_>) -> Report<()> {
         })
         .with_message(|| format!("failed to read {}", orig_index.display()))?;
 
+    let mut embed_links = Some(|el: &mut Element| {
+        el.append(&js_link(paths.js), ContentType::Html);
+        el.append(&wasm_link(paths.wasm), ContentType::Html);
+        for snippet in paths.snippets {
+            if let Some(ext) = snippet.extension() {
+                if ext == "js" {
+                    el.append(&js_link(snippet), ContentType::Html);
+                }
+            }
+        }
+    });
+
+    let mut embed_js_script = Some(|el: &mut Element| el.append(&js_script, ContentType::Html));
+
     let settings = RewriteStrSettings {
         element_content_handlers: vec![
             element!("head", |el| {
-                el.append(&js_link(paths.js), ContentType::Html);
-                el.append(&wasm_link(paths.wasm), ContentType::Html);
-                for snippet in paths.snippets {
-                    el.append(&js_link(snippet), ContentType::Html);
+                if let Some(f) = embed_links.take() {
+                    f(el);
                 }
 
                 Ok(())
             }),
             element!("body", |el| {
-                el.append(&js_script, ContentType::Html);
+                if let Some(f) = embed_js_script.take() {
+                    f(el);
+                }
+
                 Ok(())
             }),
         ],
@@ -458,6 +475,20 @@ fn make_index_html(orig_index: &Path, paths: Paths<'_>) -> Report<()> {
     let html_new = rewrite_str(&html, settings)
         .map_err_into_io()
         .message("failed to rewrite html")?;
+
+    if embed_links.is_some() {
+        return Err(Error::message(format!(
+            "<head> tag not found in {} file",
+            orig_index.display(),
+        )));
+    }
+
+    if embed_js_script.is_some() {
+        return Err(Error::message(format!(
+            "<body> tag not found in {} file",
+            orig_index.display(),
+        )));
+    }
 
     fs::write(paths.index, html_new)
         .with_message(|| format!("failed to write {} file", paths.index.display()))?;
