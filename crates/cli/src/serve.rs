@@ -6,7 +6,8 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
-use tower_async::Service;
+use tower_async::{Service, ServiceBuilder};
+use tower_async_http::compression::CompressionLayer;
 use tower_async_http::services::ServeDir;
 
 use crate::build::build;
@@ -34,7 +35,11 @@ async fn start(dist: &Path) -> Report<()> {
 
     log::starting!("development server at http://{ip}:{port}");
 
-    let serve_dist: &_ = Box::leak(Box::new(ServeDir::new(dist)));
+    let serve = ServiceBuilder::new()
+        .layer(CompressionLayer::new())
+        .service(ServeDir::new(dist));
+
+    let serve: &_ = Box::leak(Box::new(serve));
 
     loop {
         let (tcp, _) = listener
@@ -45,7 +50,7 @@ async fn start(dist: &Path) -> Report<()> {
         tokio::spawn(async {
             let io = TokioIo::new(tcp);
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(|req| serve_dist.call(req)))
+                .serve_connection(io, service_fn(|req| serve.call(req)))
                 .await
             {
                 log::error!("serving connection: {err}");
