@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
+use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tokio::runtime::Builder;
@@ -33,6 +34,7 @@ async fn start(s: &Serve) -> Report<()> {
 
     let serve = {
         let serve = ServiceBuilder::new()
+            .layer_fn(Logger)
             .layer(CompressionLayer::new())
             .service(ServeDir::new(&s.build.dist));
 
@@ -55,5 +57,29 @@ async fn start(s: &Serve) -> Report<()> {
                 log::error!("serving connection: {err}");
             }
         });
+    }
+}
+
+pub struct Logger<S>(S);
+
+impl<S, I, O> Service<Request<I>> for Logger<S>
+where
+    S: Service<Request<I>, Response = Response<O>, Error: Display>,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+
+    async fn call(&self, req: Request<I>) -> Result<Self::Response, Self::Error> {
+        let method = req.method().to_owned();
+        let uri = req.uri().to_owned();
+
+        let out = self.0.call(req).await;
+
+        match &out {
+            Ok(res) => log::info!("{method} {uri} -> {}", res.status()),
+            Err(err) => log::info!("{method} {uri} -> {err} (failed)"),
+        }
+
+        out
     }
 }
