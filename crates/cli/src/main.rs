@@ -37,20 +37,14 @@ struct Cli {
 enum Command {
     /// Build a kobold crate
     #[command(visible_alias = "b")]
-    Build {
-        #[command(flatten)]
-        b: Build,
-    },
+    Build(Build),
 
     /// Create a new kobold crate
     Init(Init),
 
     /// Start a local development server
     #[command(visible_alias = "s")]
-    Serve {
-        #[command(flatten)]
-        b: Build,
-    },
+    Serve(Serve),
 }
 
 #[derive(Clone, Copy, Default, ValueEnum)]
@@ -78,6 +72,20 @@ struct Init {
     name: Option<String>,
 }
 
+#[derive(Args)]
+struct Serve {
+    /// The development server address
+    #[arg(short, long, default_value = "127.0.0.1")]
+    address: String,
+
+    /// The development server port
+    #[arg(short, long, default_value_t = 3000)]
+    port: u16,
+
+    #[clap(flatten)]
+    build: Build,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
@@ -95,9 +103,9 @@ fn main() -> ExitCode {
     }
 
     let res = match cli.command {
-        Command::Build { b } => build(&b),
+        Command::Build(b) => build(&b),
         Command::Init(i) => init(&i),
-        Command::Serve { b } => serve(&b),
+        Command::Serve(s) => serve(&s),
     };
 
     match res {

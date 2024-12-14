@@ -1,5 +1,4 @@
-use std::net::Ipv4Addr;
-use std::path::Path;
+use std::sync::Arc;
 
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -13,33 +12,32 @@ use tower_async_http::services::ServeDir;
 use crate::build::build;
 use crate::log;
 use crate::report::{ErrorExt, Report};
-use crate::Build;
+use crate::Serve;
 
-pub fn serve(b: &Build) -> Report<()> {
-    build(b)?;
+pub fn serve(s: &Serve) -> Report<()> {
+    build(&s.build)?;
 
     Builder::new_current_thread()
         .enable_all()
         .build()
         .message("failed to create tokio runtime")?
-        .block_on(start(&b.dist))
+        .block_on(start(s))
 }
 
-async fn start(dist: &Path) -> Report<()> {
-    let ip = Ipv4Addr::LOCALHOST;
-    let port = 3000;
-
-    let listener = TcpListener::bind((ip, port))
+async fn start(s: &Serve) -> Report<()> {
+    let listener = TcpListener::bind((s.address.as_str(), s.port))
         .await
-        .with_message(|| format!("failed to bind tcp listener to {ip}:{port}"))?;
+        .with_message(|| format!("failed to bind tcp listener to {}:{}", s.address, s.port))?;
 
-    log::starting!("development server at http://{ip}:{port}");
+    log::starting!("development server at http://{}:{}", s.address, s.port);
 
-    let serve = ServiceBuilder::new()
-        .layer(CompressionLayer::new())
-        .service(ServeDir::new(dist));
+    let serve = {
+        let serve = ServiceBuilder::new()
+            .layer(CompressionLayer::new())
+            .service(ServeDir::new(&s.build.dist));
 
-    let serve: &_ = Box::leak(Box::new(serve));
+        Arc::new(serve)
+    };
 
     loop {
         let (tcp, _) = listener
@@ -47,7 +45,8 @@ async fn start(dist: &Path) -> Report<()> {
             .await
             .message("failed to accept tcp connection")?;
 
-        tokio::spawn(async {
+        let serve = serve.clone();
+        tokio::spawn(async move {
             let io = TokioIo::new(tcp);
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service_fn(|req| serve.call(req)))
