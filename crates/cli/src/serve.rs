@@ -77,7 +77,7 @@ where
 
         match &out {
             Ok(res) => log::info!("{method} {uri} -> {}", res.status()),
-            Err(err) => log::info!("{method} {uri} -> {err} (failed)"),
+            Err(err) => log::error!("{method} {uri} -> {err}"),
         }
 
         out

@@ -25,11 +25,11 @@ struct Cli {
     command: Command,
 
     /// Use verbose output
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     verbose: bool,
 
     /// When to use colors in output
-    #[arg(long, default_value_t, value_enum)]
+    #[arg(long, default_value_t, value_enum, global = true)]
     color: When,
 }
 

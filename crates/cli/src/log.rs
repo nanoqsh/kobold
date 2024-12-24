@@ -25,56 +25,56 @@ pub fn is_color_output_enabled() -> bool {
 
 #[macro_export]
 macro_rules! error {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         eprintln!("{}: {}", $crate::log::Error, format_args!($($arg)*));
-    };
+    }};
 }
 
 pub use error;
 
 #[macro_export]
 macro_rules! building {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         eprintln!("{} {}", $crate::log::Title("    Building"), format_args!($($arg)*));
-    };
+    }};
 }
 
 pub use building;
 
 #[macro_export]
 macro_rules! optimized {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         eprintln!("{} {}", $crate::log::Title("   Optimized"), format_args!($($arg)*));
-    };
+    }};
 }
 
 pub use optimized;
 
 #[macro_export]
 macro_rules! creating {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         eprintln!("{} {}", $crate::log::Title("    Creating"), format_args!($($arg)*));
-    };
+    }};
 }
 
 pub use creating;
 
 #[macro_export]
 macro_rules! starting {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         eprintln!("{} {}", $crate::log::Title("    Starting"), format_args!($($arg)*));
-    };
+    }};
 }
 
 pub use starting;
 
 #[macro_export]
 macro_rules! info {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         if $crate::log::is_verbose_output_enabled() {
             eprintln!("{} {}", $crate::log::Title("        Info"), format_args!($($arg)*));
         }
-    };
+    }};
 }
 
 pub use info;
