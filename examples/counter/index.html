@@ -7,20 +7,6 @@
 </head>
 
 <body>
-  <script>
-    (() => {
-      const es = new EventSource('events');
-      es.addEventListener('update', ev => {
-        const msg = JSON.parse(ev.data);
-
-        if (msg == 'reload') {
-          window.location.reload();
-        } else if (msg.error) {
-          console.error('rebuild failed:', msg.error);
-        }
-      });
-    })()
-  </script>
 </body>
 
 </html>

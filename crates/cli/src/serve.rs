@@ -69,7 +69,7 @@ fn rebuild(s: &Serve, mut builder: Builder, updates: Updates) {
         };
 
         for path in &paths {
-            log::info!("file {} updated", path.display());
+            log::info!("updated {}", path.display());
         }
 
         let res = build(&s.build);

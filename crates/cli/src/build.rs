@@ -71,7 +71,11 @@ pub fn build(b: &Build) -> Report<()> {
         index: &index,
     };
 
-    make_index_html(Path::new("index.html"), paths)?;
+    make_index_html(MakeIndex {
+        orig_index: Path::new("index.html"),
+        paths,
+        embed_reload_script: true,
+    })?;
 
     Ok(())
 }
@@ -403,7 +407,19 @@ impl Dist<'_> {
     }
 }
 
-fn make_index_html(orig_index: &Path, paths: Paths<'_>) -> Report<()> {
+struct MakeIndex<'path> {
+    orig_index: &'path Path,
+    paths: Paths<'path>,
+    embed_reload_script: bool,
+}
+
+fn make_index_html(m: MakeIndex) -> Report<()> {
+    let MakeIndex {
+        orig_index,
+        paths,
+        embed_reload_script,
+    } = m;
+
     let js_link = |p| {
         format!(
             r#"<link rel="modulepreload" href="{}" crossorigin=anonymous>"#,
@@ -450,7 +466,15 @@ fn make_index_html(orig_index: &Path, paths: Paths<'_>) -> Report<()> {
         }
     });
 
-    let mut embed_js_script = Some(|el: &mut Element| el.append(&js_script, ContentType::Html));
+    let mut embed_js_script = Some(|el: &mut Element| {
+        el.append(&js_script, ContentType::Html);
+
+        if embed_reload_script {
+            el.append("<script>", ContentType::Html);
+            el.append(include_str!("../reload.js"), ContentType::Html);
+            el.append("</script>", ContentType::Html);
+        }
+    });
 
     let settings = RewriteStrSettings {
         element_content_handlers: vec![
