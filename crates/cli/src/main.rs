@@ -82,6 +82,10 @@ struct Serve {
     #[arg(short, long, default_value_t = 3000)]
     port: u16,
 
+    /// Watch files and directories
+    #[arg(short, long)]
+    watch: Vec<PathBuf>,
+
     #[clap(flatten)]
     build: Build,
 }
