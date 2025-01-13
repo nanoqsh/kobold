@@ -244,7 +244,7 @@ impl Update {
 
         let repr = match res {
             Ok(()) => Repr::Reload,
-            Err(e) => Repr::Error(e.to_string()),
+            Err(err) => Repr::Error(err.to_string()),
         };
 
         let mut buf = b"event: update\ndata: ".to_vec();

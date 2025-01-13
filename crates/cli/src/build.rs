@@ -7,15 +7,14 @@ use std::process::Command;
 use std::time::Instant;
 
 use leb128::write::unsigned as leb128_write;
-use lol_html::{
-    element, html_content::ContentType, html_content::Element, rewrite_str, RewriteStrSettings,
-};
+use lol_html::html_content::{ContentType, Element};
+use lol_html::{element, rewrite_str, RewriteStrSettings};
 use wasmparser::BinaryReaderError;
 
 use crate::log;
 use crate::manifest::{manifest, Manifest};
 use crate::report::{Error, ErrorExt, Report};
-use crate::Build;
+use crate::{Build, When};
 
 pub fn build(b: &Build) -> Report<()> {
     let Manifest {
@@ -26,10 +25,10 @@ pub fn build(b: &Build) -> Report<()> {
 
     log::building!("{crate_name} v{crate_version}");
 
-    build_wasm()?;
+    build_wasm(b.release)?;
 
     target.push("wasm32-unknown-unknown");
-    target.push("release");
+    target.push(if b.release { "release" } else { "debug" });
     target.push(&crate_name);
     target.set_extension("wasm");
 
@@ -47,7 +46,9 @@ pub fn build(b: &Build) -> Report<()> {
     let mut wasm = b.dist.join(format!("{crate_name}_bg"));
     wasm.set_extension("wasm");
 
-    optimize_wasm(&wasm)?;
+    if b.release {
+        optimize_wasm(&wasm)?;
+    }
 
     let elapsed = start.elapsed();
     let wasm_path = absolute(&wasm).message("failed to get absolute path")?;
@@ -74,15 +75,25 @@ pub fn build(b: &Build) -> Report<()> {
     make_index_html(MakeIndex {
         orig_index: Path::new("index.html"),
         paths,
-        embed_reload_script: true,
+        embed_autoreload_script: match b.autoreload {
+            When::Auto => !b.release,
+            When::Always => true,
+            When::Never => false,
+        },
     })?;
 
     Ok(())
 }
 
-fn build_wasm() -> Report<()> {
-    let status = Command::new("cargo")
-        .args(["build", "--release", "--target=wasm32-unknown-unknown"])
+fn build_wasm(release: bool) -> Report<()> {
+    let mut cargo = Command::new("cargo");
+    cargo.args(["build", "--target=wasm32-unknown-unknown"]);
+
+    if release {
+        cargo.arg("--release");
+    }
+
+    let status = cargo
         .spawn()
         .message("failed to run cargo")?
         .wait()
@@ -410,14 +421,14 @@ impl Dist<'_> {
 struct MakeIndex<'path> {
     orig_index: &'path Path,
     paths: Paths<'path>,
-    embed_reload_script: bool,
+    embed_autoreload_script: bool,
 }
 
 fn make_index_html(m: MakeIndex) -> Report<()> {
     let MakeIndex {
         orig_index,
         paths,
-        embed_reload_script,
+        embed_autoreload_script,
     } = m;
 
     let js_link = |p| {
@@ -469,7 +480,7 @@ fn make_index_html(m: MakeIndex) -> Report<()> {
     let mut embed_js_script = Some(|el: &mut Element| {
         el.append(&js_script, ContentType::Html);
 
-        if embed_reload_script {
+        if embed_autoreload_script {
             el.append("<script>", ContentType::Html);
             el.append(include_str!("../reload.js"), ContentType::Html);
             el.append("</script>", ContentType::Html);

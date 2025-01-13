@@ -10,7 +10,7 @@ use crate::serve::serve;
 
 mod build;
 mod init;
-#[allow(dead_code, unused_imports)]
+#[expect(dead_code, unused_imports)]
 mod js;
 mod log;
 mod manifest;
@@ -60,6 +60,14 @@ struct Build {
     /// The asset output directory
     #[arg(short, long, default_value = "dist")]
     dist: PathBuf,
+
+    /// Build the crate in release mode
+    #[arg(short, long)]
+    release: bool,
+
+    /// When to add auto-reload script to the final build
+    #[arg(long, default_value_t, value_enum)]
+    autoreload: When,
 }
 
 #[derive(Args)]
