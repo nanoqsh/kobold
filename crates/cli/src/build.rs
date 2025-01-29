@@ -57,7 +57,7 @@ pub fn build(b: &Build) -> Report<()> {
     let mut js = b.dist.join(&crate_name);
     js.set_extension("js");
 
-    mangle_wasm(&wasm, &js)?;
+    // mangle_wasm(&wasm, &js)?;
 
     let snippets_dir = b.dist.join("snippets");
     let snippets = read_file_paths(&snippets_dir)
