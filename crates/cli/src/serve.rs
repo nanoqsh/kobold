@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::thread;
@@ -29,7 +29,7 @@ use crate::report::{Error, ErrorExt, Report};
 use crate::Serve;
 
 pub fn serve(s: &Serve) -> Report<()> {
-    let info = build(&s.build)?;
+    let BuildInfo { dist_path, .. } = build(&s.build)?;
 
     let (notifier, builder, debounce_routine) = debounce(Timings {
         delay_after_update: Duration::from_millis(250),
@@ -51,7 +51,7 @@ pub fn serve(s: &Serve) -> Report<()> {
             .build()
             .message("failed to create tokio runtime")?
             .block_on(async {
-                future::try_zip(start_server(s, info, updates), async {
+                future::try_zip(start_server(s, &dist_path, updates), async {
                     debounce_routine.await;
                     Ok(())
                 })
@@ -186,7 +186,7 @@ struct BuildEvent {
     done: oneshot::Sender<()>,
 }
 
-async fn start_server(s: &Serve, info: BuildInfo<'_>, updates: Updates) -> Report<Infallible> {
+async fn start_server(s: &Serve, dist_path: &Path, updates: Updates) -> Report<Infallible> {
     let listener = TcpListener::bind((s.address.as_str(), s.port))
         .await
         .with_message(|| format!("failed to bind tcp listener to {}:{}", s.address, s.port))?;
@@ -196,7 +196,7 @@ async fn start_server(s: &Serve, info: BuildInfo<'_>, updates: Updates) -> Repor
     let serve = {
         let files = ServiceBuilder::new()
             .layer(CompressionLayer::new())
-            .service(ServeDir::new(info.dist_path));
+            .service(ServeDir::new(dist_path));
 
         let serve = ServiceBuilder::new().layer_fn(Logger).service(Events {
             path: "/events",
